@@ -22,6 +22,7 @@ DEFAULT_CONFIG = {
     "_info3": "names_in_column: true — фамилии столбиком, false — в строку через запятую.",
     "_info4": "ЦВЕТА СМЕН: у каждой смены поле 'color'. Примеры: #ff9500, #00bfff, #ffcc00.",
     "_info5": "F11 — полный экран (без рамки Windows), Esc — выйти из полного экрана.",
+    "_info6": "today_border_width: толщина красной рамки вокруг сегодняшнего дня (в пикселях).",
     "start_date": "2026-01-01",
     "shift_days": 3,
     "names_in_column": True,
@@ -50,7 +51,8 @@ DEFAULT_CONFIG = {
         "font_date": 11,
         "font_title": 16,
         "font_head": 10,
-        "font_info": 10
+        "font_info": 10,
+        "today_border_width": 2
     }
 }
 
@@ -170,14 +172,11 @@ class MatrixShiftCalendar:
         self.today_info.pack(side="bottom", fill="x", pady=(0, 3))
 
         # === Шапка дней недели ===
-        # padx=8 — как у grid_frame, чтобы колонки совпадали
         self.head_frame = tk.Frame(root, bg=GREEN_DRK)
         self.head_frame.pack(side="top", fill="x", padx=8, pady=(3, 0))
 
         days_short = ["ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС"]
         for i, d in enumerate(days_short):
-            # padx=1, pady=2 — совпадает с ячейками календаря (padx=1)
-            # anchor="center" — текст ровно по центру своей колонки
             tk.Label(self.head_frame, text=d, font=self.FONT_HEAD,
                      bg=GREEN_DRK, fg=GREEN_BRT,
                      anchor="center", justify="center"
@@ -297,12 +296,14 @@ class MatrixShiftCalendar:
              for t in self.teams]
         )
         mode = "столбиком" if self.names_in_column else "в строку"
+        bw = self.ui.get("today_border_width", 2)
 
         messagebox.showinfo(
             "НАСТРОЙКИ ОБНОВЛЕНЫ",
             f"Файл: {CONFIG_FILE}\n\n"
             f"Смен: {len(self.teams)}\n{teams_info}\n\n"
             f"Фамилии: {mode}\n"
+            f"Рамка сегодня: {bw} px\n"
             f"Начало цикла: {self.start_date}\n"
             f"Длина смены: {self.shift_days} дн.\n\n"
             f"F11 — полный экран, Esc — выход"
@@ -331,19 +332,20 @@ class MatrixShiftCalendar:
         while len(weeks) < 6:
             weeks.append([0] * 7)
 
+        # Толщина красной рамки (внутренний отступ внутри cell_border)
+        bw = int(self.ui.get("today_border_width", 2))
+
         for row, week in enumerate(weeks):
             self.grid_frame.grid_rowconfigure(
                 row, weight=1, minsize=self.ui["cell_min_height"])
             for col, day in enumerate(week):
-                # uniform="days" — гарантирует, что все колонки календаря
-                # имеют одинаковую ширину (совпадает с шапкой)
                 self.grid_frame.grid_columnconfigure(col, weight=1, uniform="days")
 
-                cell_border = tk.Frame(self.grid_frame, bg=GREEN_DIM)
-                cell_border.grid(row=row, column=col,
-                                 padx=1, pady=1, sticky="nsew")
-
+                # Пустая ячейка
                 if day == 0:
+                    cell_border = tk.Frame(self.grid_frame, bg=GREEN_DIM)
+                    cell_border.grid(row=row, column=col,
+                                     padx=1, pady=1, sticky="nsew")
                     tk.Label(cell_border, text="", bg=BG_CELL).pack(
                         fill="both", expand=True)
                     continue
@@ -356,10 +358,25 @@ class MatrixShiftCalendar:
                 team_color = team["color"] if team else GREEN_DIM
                 bg = BG_CELL
 
+                # === Рамка ячейки: красная для сегодня, толще ===
+                if is_today:
+                    border_color = RED
+                    outer_padx = bw
+                    outer_pady = bw
+                else:
+                    border_color = GREEN_DIM
+                    outer_padx = 1
+                    outer_pady = 1
+
+                cell_border = tk.Frame(self.grid_frame, bg=border_color)
+                cell_border.grid(row=row, column=col,
+                                 padx=outer_padx, pady=outer_pady,
+                                 sticky="nsew")
+
                 cell = tk.Frame(cell_border, bg=bg)
                 cell.pack(fill="both", expand=True)
 
-                # === ВЕРХНЯЯ СТРОКА: [пусто] [число по центру] [праздник справа] ===
+                # === ВЕРХНЯЯ СТРОКА ===
                 head = tk.Frame(cell, bg=bg)
                 head.pack(fill="x", pady=(2, 0))
                 head.grid_columnconfigure(0, weight=1)
@@ -369,17 +386,11 @@ class MatrixShiftCalendar:
                 tk.Label(head, text="", bg=bg).grid(
                     row=0, column=0, sticky="nsew")
 
-                if is_today:
-                    day_label = tk.Label(
-                        head, text=str(day), font=self.FONT_DAY,
-                        bg=team_color, fg=BG, padx=4
-                    )
-                else:
-                    day_fg = RED if hol_name else team_color
-                    day_label = tk.Label(
-                        head, text=str(day), font=self.FONT_DAY,
-                        bg=bg, fg=day_fg
-                    )
+                day_fg = RED if hol_name else team_color
+                day_label = tk.Label(
+                    head, text=str(day), font=self.FONT_DAY,
+                    bg=bg, fg=day_fg
+                )
                 day_label.grid(row=0, column=1)
 
                 if hol_name:
@@ -389,7 +400,7 @@ class MatrixShiftCalendar:
                         bg=bg, fg=RED, anchor="e"
                     ).grid(row=0, column=2, sticky="e", padx=(0, 4))
 
-                # === Фамилии по центру ===
+                # === Фамилии ===
                 if team:
                     if self.names_in_column:
                         names_text = "\n".join(team["members"])
