@@ -35,19 +35,19 @@ DEFAULT_CONFIG = {
         }
     ],
     "ui": {
-        "window_width": 1100,
-        "window_height": 1080,
-        "min_width": 800,
-        "min_height": 750,
-        "cell_min_height": 100,
-        "font_day": 18,
-        "font_holiday": 8,
-        "font_names": 10,
-        "font_clock": 34,
-        "font_date": 13,
-        "font_title": 22,
-        "font_head": 11,
-        "font_info": 11
+        "window_width": 1000,
+        "window_height": 850,
+        "min_width": 700,
+        "min_height": 600,
+        "cell_min_height": 40,
+        "font_day": 16,
+        "font_holiday": 7,
+        "font_names": 9,
+        "font_clock": 26,
+        "font_date": 11,
+        "font_title": 18,
+        "font_head": 10,
+        "font_info": 10
     }
 }
 
@@ -104,7 +104,7 @@ class MatrixShiftCalendar:
 
         # === Верх: навигация + месяц ===
         top = tk.Frame(root, bg=BG)
-        top.pack(fill="x", padx=20, pady=(15, 5))
+        top.pack(side="top", fill="x", padx=20, pady=(15, 5))
 
         nav_style = {
             "font": ("Consolas", 16, "bold"),
@@ -128,7 +128,7 @@ class MatrixShiftCalendar:
 
         # === Панель кнопок ===
         toolbar = tk.Frame(root, bg=BG)
-        toolbar.pack(fill="x", padx=20, pady=(0, 5))
+        toolbar.pack(side="top", fill="x", padx=20, pady=(0, 5))
 
         btn_small = {
             "font": ("Consolas", 10, "bold"),
@@ -144,31 +144,9 @@ class MatrixShiftCalendar:
         tk.Button(toolbar, text="СЕГОДНЯ", command=self.go_today,
                   **btn_small).pack(side="right", padx=3)
 
-        # === Шапка дней недели ===
-        self.head_frame = tk.Frame(root, bg=GREEN_DRK)
-        self.head_frame.pack(fill="x", padx=20, pady=(8, 0))
-
-        days_short = ["ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС"]
-        for i, d in enumerate(days_short):
-            tk.Label(self.head_frame, text=d, font=self.FONT_HEAD,
-                     bg=GREEN_DRK, fg=GREEN_BRT, pady=5
-                     ).grid(row=0, column=i, sticky="nsew")
-            self.head_frame.grid_columnconfigure(i, weight=1)
-
-        # === Сетка ===
-        self.grid_frame = tk.Frame(root, bg=GREEN_DIM)
-        self.grid_frame.pack(fill="both", expand=True, padx=20, pady=(0, 10))
-
-        # === Информация о сегодняшней смене ===
-        self.today_info = tk.Label(
-            root, text="", font=self.FONT_INFO, bg=BG, fg=GREEN_BRT,
-            wraplength=1000, justify="center"
-        )
-        self.today_info.pack(fill="x", pady=(0, 8))
-
-        # === Часы ===
+        # === Часы и информация — ПРИЖАТЫ К НИЗУ (пакуем первыми) ===
         clock_frame = tk.Frame(root, bg=BG)
-        clock_frame.pack(fill="x", pady=(0, 12))
+        clock_frame.pack(side="bottom", fill="x", pady=(0, 10))
 
         self.time_label = tk.Label(clock_frame, font=self.FONT_CLOCK,
                                    bg=BG, fg=GREEN)
@@ -177,6 +155,28 @@ class MatrixShiftCalendar:
         self.date_label = tk.Label(clock_frame, font=self.FONT_DATE,
                                    bg=BG, fg=GREEN_DIM)
         self.date_label.pack()
+
+        self.today_info = tk.Label(
+            root, text="", font=self.FONT_INFO, bg=BG, fg=GREEN_BRT,
+            wraplength=1000, justify="center"
+        )
+        self.today_info.pack(side="bottom", fill="x", pady=(0, 6))
+
+        # === Шапка дней недели ===
+        self.head_frame = tk.Frame(root, bg=GREEN_DRK)
+        self.head_frame.pack(side="top", fill="x", padx=20, pady=(8, 0))
+
+        days_short = ["ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС"]
+        for i, d in enumerate(days_short):
+            tk.Label(self.head_frame, text=d, font=self.FONT_HEAD,
+                     bg=GREEN_DRK, fg=GREEN_BRT, pady=5
+                     ).grid(row=0, column=i, sticky="nsew")
+            self.head_frame.grid_columnconfigure(i, weight=1)
+
+        # === Сетка календаря — занимает ВСЁ оставшееся место ===
+        self.grid_frame = tk.Frame(root, bg=GREEN_DIM)
+        self.grid_frame.pack(side="top", fill="both", expand=True,
+                             padx=20, pady=(0, 6))
 
         self.build_calendar()
         self.update_clock()
@@ -220,7 +220,6 @@ class MatrixShiftCalendar:
         return self.teams[pos // self.shift_days]
 
     def reload_config(self):
-        # Читаем файл, ловим ошибки
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                 raw = f.read()
@@ -236,7 +235,6 @@ class MatrixShiftCalendar:
             )
             return
 
-        # Применяем
         self.config = new_cfg
         try:
             self.start_date = datetime.strptime(
@@ -252,7 +250,6 @@ class MatrixShiftCalendar:
         self.ui = {**DEFAULT_UI, **ui_from_file}
         self.apply_fonts()
 
-        # Обновляем шрифты существующих виджетов
         self.title_label.config(font=self.FONT_TITLE)
         self.today_info.config(font=self.FONT_INFO)
         self.time_label.config(font=self.FONT_CLOCK)
@@ -260,7 +257,6 @@ class MatrixShiftCalendar:
         for w in self.head_frame.winfo_children():
             w.config(font=self.FONT_HEAD)
 
-        # Размер окна
         self.root.geometry(
             f"{self.ui['window_width']}x{self.ui['window_height']}"
         )
@@ -269,7 +265,6 @@ class MatrixShiftCalendar:
         self.build_calendar()
         self.root.update_idletasks()
 
-        # Показываем, что реально загрузилось
         messagebox.showinfo(
             "НАСТРОЙКИ ОБНОВЛЕНЫ",
             f"Файл: {CONFIG_FILE}\n\n"
@@ -305,10 +300,8 @@ class MatrixShiftCalendar:
         while len(weeks) < 6:
             weeks.append([0] * 7)
 
-        cell_min_h = self.ui["cell_min_height"]
-
         for row, week in enumerate(weeks):
-            self.grid_frame.grid_rowconfigure(row, weight=1, minsize=cell_min_h)
+            self.grid_frame.grid_rowconfigure(row, weight=1, minsize=40)
             for col, day in enumerate(week):
                 self.grid_frame.grid_columnconfigure(col, weight=1)
 
@@ -341,7 +334,7 @@ class MatrixShiftCalendar:
 
                 if team and not is_today:
                     tk.Label(head, text="■",
-                             font=("Consolas", self.ui["font_names"]),
+                             font=("Consolas", int(self.ui["font_names"])),
                              bg=bg, fg=team_color).pack(side="left")
 
                 if hol_name:
