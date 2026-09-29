@@ -110,7 +110,7 @@ class MatrixShiftCalendar:
         now = datetime.now()
         self.year, self.month = now.year, now.month
 
-        # === ЕДИНАЯ ВЕРХНЯЯ ПАНЕЛЬ ===
+        # === ВЕРХНЯЯ ПАНЕЛЬ ===
         top = tk.Frame(root, bg=BG)
         top.pack(side="top", fill="x", padx=8, pady=(5, 2))
 
@@ -133,7 +133,6 @@ class MatrixShiftCalendar:
             "activebackground": GREEN_DRK, "activeforeground": GREEN_BRT
         }
 
-        # Слева: ◀ [ОБН] [JSON] [⛶]
         tk.Button(top, text="◀", command=self.prev_month,
                   **nav_btn_style).pack(side="left")
         tk.Button(top, text="ОБН", command=self.reload_config,
@@ -143,13 +142,11 @@ class MatrixShiftCalendar:
         tk.Button(top, text="⛶", command=self.toggle_fullscreen,
                   **btn_small).pack(side="left", padx=(0, 3))
 
-        # Справа: [СЕГОДНЯ] ▶
         tk.Button(top, text="▶", command=self.next_month,
                   **nav_btn_style).pack(side="right")
         tk.Button(top, text="СЕГОДНЯ", command=self.go_today,
                   **btn_small).pack(side="right", padx=(0, 3))
 
-        # По центру: название месяца
         self.title_label = tk.Label(top, font=self.FONT_TITLE,
                                     bg=BG, fg=GREEN)
         self.title_label.pack(side="left", expand=True)
@@ -173,15 +170,19 @@ class MatrixShiftCalendar:
         self.today_info.pack(side="bottom", fill="x", pady=(0, 3))
 
         # === Шапка дней недели ===
+        # padx=8 — как у grid_frame, чтобы колонки совпадали
         self.head_frame = tk.Frame(root, bg=GREEN_DRK)
         self.head_frame.pack(side="top", fill="x", padx=8, pady=(3, 0))
 
         days_short = ["ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС"]
         for i, d in enumerate(days_short):
+            # padx=1, pady=2 — совпадает с ячейками календаря (padx=1)
+            # anchor="center" — текст ровно по центру своей колонки
             tk.Label(self.head_frame, text=d, font=self.FONT_HEAD,
-                     bg=GREEN_DRK, fg=GREEN_BRT, pady=2
-                     ).grid(row=0, column=i, sticky="nsew")
-            self.head_frame.grid_columnconfigure(i, weight=1)
+                     bg=GREEN_DRK, fg=GREEN_BRT,
+                     anchor="center", justify="center"
+                     ).grid(row=0, column=i, sticky="nsew", padx=1, pady=2)
+            self.head_frame.grid_columnconfigure(i, weight=1, uniform="days")
 
         # === Сетка календаря ===
         self.grid_frame = tk.Frame(root, bg=GREEN_DIM)
@@ -334,7 +335,9 @@ class MatrixShiftCalendar:
             self.grid_frame.grid_rowconfigure(
                 row, weight=1, minsize=self.ui["cell_min_height"])
             for col, day in enumerate(week):
-                self.grid_frame.grid_columnconfigure(col, weight=1)
+                # uniform="days" — гарантирует, что все колонки календаря
+                # имеют одинаковую ширину (совпадает с шапкой)
+                self.grid_frame.grid_columnconfigure(col, weight=1, uniform="days")
 
                 cell_border = tk.Frame(self.grid_frame, bg=GREEN_DIM)
                 cell_border.grid(row=row, column=col,
@@ -356,9 +359,15 @@ class MatrixShiftCalendar:
                 cell = tk.Frame(cell_border, bg=bg)
                 cell.pack(fill="both", expand=True)
 
-                # === ВЕРХНЯЯ СТРОКА: число + праздник справа ===
+                # === ВЕРХНЯЯ СТРОКА: [пусто] [число по центру] [праздник справа] ===
                 head = tk.Frame(cell, bg=bg)
                 head.pack(fill="x", pady=(2, 0))
+                head.grid_columnconfigure(0, weight=1)
+                head.grid_columnconfigure(1, weight=0)
+                head.grid_columnconfigure(2, weight=1)
+
+                tk.Label(head, text="", bg=bg).grid(
+                    row=0, column=0, sticky="nsew")
 
                 if is_today:
                     day_label = tk.Label(
@@ -371,16 +380,16 @@ class MatrixShiftCalendar:
                         head, text=str(day), font=self.FONT_DAY,
                         bg=bg, fg=day_fg
                     )
-                day_label.pack(side="left", padx=(5, 3))
+                day_label.grid(row=0, column=1)
 
                 if hol_name:
-                    short = hol_name if len(hol_name) <= 22 else hol_name[:20] + "…"
+                    short = hol_name if len(hol_name) <= 16 else hol_name[:14] + "…"
                     tk.Label(
                         head, text=short, font=self.FONT_HOL,
-                        bg=bg, fg=RED, anchor="w"
-                    ).pack(side="left", fill="x", expand=True, padx=(0, 4))
+                        bg=bg, fg=RED, anchor="e"
+                    ).grid(row=0, column=2, sticky="e", padx=(0, 4))
 
-                # === Фамилии под числом ===
+                # === Фамилии по центру ===
                 if team:
                     if self.names_in_column:
                         names_text = "\n".join(team["members"])
@@ -390,8 +399,8 @@ class MatrixShiftCalendar:
                     tk.Label(
                         cell, text=names_text, font=self.FONT_NAME,
                         bg=bg, fg=team_color,
-                        wraplength=250, justify="left", anchor="nw"
-                    ).pack(padx=5, pady=(1, 2), anchor="nw",
+                        wraplength=250, justify="center", anchor="n"
+                    ).pack(padx=5, pady=(1, 2), anchor="n",
                            fill="both", expand=True)
 
         self.update_today_info()
