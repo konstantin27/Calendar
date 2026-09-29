@@ -19,9 +19,8 @@ CONFIG_FILE = os.path.join(get_base_dir(), "shifts.json")
 DEFAULT_CONFIG = {
     "_info1": "Фамилии, даты, цвета, размеры — всё здесь. После правки нажми ОБНОВИТЬ в программе.",
     "_info2": "start_date: начало цикла (ГГГГ-ММ-ДД). shift_days: сколько дней подряд работает смена (3 для 3/3).",
-    "_info3": "names_in_column: true — фамилии столбиком (компактно), false — в строку через запятую.",
+    "_info3": "names_in_column: true — фамилии столбиком, false — в строку через запятую.",
     "_info4": "ЦВЕТА СМЕН: у каждой смены поле 'color'. Примеры: #ff9500 (оранжевый), #00bfff (голубой), #ffcc00 (жёлтый).",
-    "_info5": "Клик по любому дню в календаре — откроется окно со всеми фамилиями крупно.",
     "start_date": "2026-01-01",
     "shift_days": 3,
     "names_in_column": True,
@@ -42,9 +41,9 @@ DEFAULT_CONFIG = {
         "window_height": 900,
         "min_width": 800,
         "min_height": 650,
-        "cell_min_height": 60,
+        "cell_min_height": 70,
         "font_day": 16,
-        "font_holiday": 7,
+        "font_holiday": 9,
         "font_names": 8,
         "font_clock": 26,
         "font_date": 11,
@@ -209,7 +208,7 @@ class MatrixShiftCalendar:
     def apply_fonts(self):
         u = self.ui
         self.FONT_DAY   = ("Consolas", int(u["font_day"]), "bold")
-        self.FONT_HOL   = ("Consolas", int(u["font_holiday"]))
+        self.FONT_HOL   = ("Consolas", int(u["font_holiday"]), "bold")
         self.FONT_NAME  = ("Consolas", int(u["font_names"]))
         self.FONT_TITLE = ("Consolas", int(u["font_title"]), "bold")
         self.FONT_HEAD  = ("Consolas", int(u["font_head"]), "bold")
@@ -335,153 +334,50 @@ class MatrixShiftCalendar:
                 team_color = team["color"] if team else GREEN_DIM
                 bg = BG_CELL
 
-                # --- Кликабельная ячейка ---
-                cell = tk.Frame(cell_border, bg=bg, cursor="hand2")
+                cell = tk.Frame(cell_border, bg=bg)
                 cell.pack(fill="both", expand=True)
 
-                # Сохраняем данные для клика
-                cell_data = {
-                    "day": day,
-                    "date": d_obj,
-                    "team": team,
-                    "holiday": hol_name,
-                    "is_today": is_today,
-                }
-                self.bind_click_recursive(cell, cell_data)
-
-                # === Шапка ячейки: только число ===
+                # === ВЕРХНЯЯ СТРОКА: число + праздник справа ===
                 head = tk.Frame(cell, bg=bg)
-                head.pack(fill="x", pady=(3, 0))
-                self.bind_click_recursive(head, cell_data)
+                head.pack(fill="x", pady=(2, 0))
 
                 if is_today:
+                    # Сегодня — число на цветной плашке
                     day_label = tk.Label(
                         head, text=str(day), font=self.FONT_DAY,
-                        bg=team_color, fg=BG, padx=4, cursor="hand2"
+                        bg=team_color, fg=BG, padx=4
                     )
                 else:
                     day_fg = RED if hol_name else team_color
                     day_label = tk.Label(
                         head, text=str(day), font=self.FONT_DAY,
-                        bg=bg, fg=day_fg, cursor="hand2"
+                        bg=bg, fg=day_fg
                     )
-                day_label.pack(side="left", padx=(5, 2))
-                self.bind_click_recursive(day_label, cell_data)
+                day_label.pack(side="left", padx=(5, 3))
 
-                # === Праздник ===
+                # === Название праздника — СПРАВА от числа ===
                 if hol_name:
-                    short = hol_name if len(hol_name) <= 32 else hol_name[:30] + "…"
-                    lbl = tk.Label(cell, text=short, font=self.FONT_HOL,
-                                   bg=bg, fg=RED, wraplength=140,
-                                   justify="center", cursor="hand2")
-                    lbl.pack(padx=3, anchor="w")
-                    self.bind_click_recursive(lbl, cell_data)
+                    short = hol_name if len(hol_name) <= 22 else hol_name[:20] + "…"
+                    tk.Label(
+                        head, text=short, font=self.FONT_HOL,
+                        bg=bg, fg=RED, anchor="w"
+                    ).pack(side="left", fill="x", expand=True, padx=(0, 4))
 
-                # === Фамилии ===
+                # === Фамилии под числом ===
                 if team:
                     if self.names_in_column:
                         names_text = "\n".join(team["members"])
-                        wrap = 200
                     else:
                         names_text = ", ".join(team["members"])
-                        wrap = 200
 
-                    names_lbl = tk.Label(
+                    tk.Label(
                         cell, text=names_text, font=self.FONT_NAME,
                         bg=bg, fg=team_color,
-                        wraplength=wrap, justify="left", anchor="nw",
-                        cursor="hand2"
-                    )
-                    names_lbl.pack(padx=5, pady=(2, 3), anchor="nw",
-                                   fill="both", expand=True)
-                    self.bind_click_recursive(names_lbl, cell_data)
+                        wraplength=200, justify="left", anchor="nw"
+                    ).pack(padx=5, pady=(1, 2), anchor="nw",
+                           fill="both", expand=True)
 
         self.update_today_info()
-
-    def bind_click_recursive(self, widget, data):
-        """Навешивает обработчик клика на виджет и всех его потомков."""
-        widget.bind("<Button-1>", lambda e, d=data: self.show_day_details(d))
-        for child in widget.winfo_children():
-            self.bind_click_recursive(child, data)
-
-    # ============ Окно деталей дня ============
-    def show_day_details(self, data):
-        d = data["date"]
-        team = data["team"]
-        hol = data["holiday"]
-
-        win = tk.Toplevel(self.root)
-        win.title(f"День {d.day:02d}.{d.month:02d}.{d.year}")
-        win.configure(bg=BG)
-        win.geometry("500x480")
-        win.transient(self.root)
-        win.resizable(False, False)
-
-        # Заголовок
-        weekday = WEEKDAYS_RU[d.weekday()]
-        month = MONTHS_RU_GEN[d.month - 1]
-        tk.Label(
-            win, text=f"{weekday}",
-            font=("Consolas", 16, "bold"), bg=BG, fg=GREEN
-        ).pack(pady=(20, 0))
-        tk.Label(
-            win, text=f"{d.day} {month} {d.year}",
-            font=("Consolas", 20, "bold"), bg=BG, fg=GREEN_BRT
-        ).pack(pady=(0, 15))
-
-        tk.Label(
-            win, text="───────────────────────",
-            font=("Consolas", 12), bg=BG, fg=GREEN_DIM
-        ).pack()
-
-        # Праздник
-        if hol:
-            tk.Label(
-                win, text=f"🎉 {hol}",
-                font=("Consolas", 13, "bold"), bg=BG, fg=RED,
-                wraplength=460, justify="center"
-            ).pack(pady=(15, 5))
-
-        # Смена
-        if team:
-            team_color = team["color"]
-            tk.Label(
-                win, text=team["name"].upper(),
-                font=("Consolas", 16, "bold"), bg=BG, fg=team_color
-            ).pack(pady=(15, 5))
-
-            tk.Label(
-                win, text="На смене:",
-                font=("Consolas", 11), bg=BG, fg=GREEN_DIM
-            ).pack(pady=(5, 8))
-
-            # Фамилии крупно — каждая с новой строки
-            for member in team["members"]:
-                tk.Label(
-                    win, text=f"  ▸  {member}",
-                    font=("Consolas", 16, "bold"),
-                    bg=BG, fg=team_color, anchor="w"
-                ).pack(fill="x", padx=80, pady=3)
-        else:
-            tk.Label(
-                win, text="ВЫХОДНОЙ",
-                font=("Consolas", 18, "bold"), bg=BG, fg=GREEN_DIM
-            ).pack(pady=30)
-
-        # Кнопка закрыть
-        tk.Button(
-            win, text="[ ЗАКРЫТЬ ]",
-            font=("Consolas", 11, "bold"),
-            bg=BG, fg=GREEN, bd=1, relief="solid",
-            highlightthickness=1, highlightbackground=GREEN_DIM,
-            padx=20, pady=5, cursor="hand2",
-            activebackground=GREEN_DRK, activeforeground=GREEN_BRT,
-            command=win.destroy
-        ).pack(side="bottom", pady=20)
-
-        # Закрытие по Esc
-        win.bind("<Escape>", lambda e: win.destroy())
-        win.focus_force()
 
     def update_today_info(self):
         today = date.today()
