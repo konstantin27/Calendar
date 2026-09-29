@@ -104,9 +104,9 @@ class MatrixShiftCalendar:
         now = datetime.now()
         self.year, self.month = now.year, now.month
 
-        # === Верхняя панель ===
+        # === ЕДИНАЯ ВЕРХНЯЯ ПАНЕЛЬ (всё в одну строку) ===
         top = tk.Frame(root, bg=BG)
-        top.pack(side="top", fill="x", padx=10, pady=(6, 2))
+        top.pack(side="top", fill="x", padx=8, pady=(5, 2))
 
         nav_btn_style = {
             "font": ("Consolas", 12, "bold"),
@@ -119,37 +119,36 @@ class MatrixShiftCalendar:
             "activeforeground": GREEN_BRT,
             "width": 2, "padx": 2, "pady": 0,
         }
+        btn_small = {
+            "font": ("Consolas", 8, "bold"),
+            "bg": BG, "fg": GREEN_DIM, "bd": 0, "relief": "flat",
+            "highlightthickness": 1, "highlightbackground": GREEN_DIM,
+            "padx": 5, "pady": 0, "cursor": "hand2",
+            "activebackground": GREEN_DRK, "activeforeground": GREEN_BRT
+        }
+
+        # Слева: ◀ [ОБН] [JSON]
         tk.Button(top, text="◀", command=self.prev_month,
                   **nav_btn_style).pack(side="left")
+        tk.Button(top, text="ОБН", command=self.reload_config,
+                  **btn_small).pack(side="left", padx=(3, 1))
+        tk.Button(top, text="JSON", command=self.open_config,
+                  **btn_small).pack(side="left", padx=(0, 3))
 
+        # Справа: [СЕГОДНЯ] ▶
+        tk.Button(top, text="▶", command=self.next_month,
+                  **nav_btn_style).pack(side="right")
+        tk.Button(top, text="СЕГОДНЯ", command=self.go_today,
+                  **btn_small).pack(side="right", padx=(0, 3))
+
+        # По центру: название месяца
         self.title_label = tk.Label(top, font=self.FONT_TITLE,
                                     bg=BG, fg=GREEN)
         self.title_label.pack(side="left", expand=True)
 
-        tk.Button(top, text="▶", command=self.next_month,
-                  **nav_btn_style).pack(side="right")
-
-        # === Панель кнопок ===
-        toolbar = tk.Frame(root, bg=BG)
-        toolbar.pack(side="top", fill="x", padx=10, pady=(0, 4))
-
-        btn_small = {
-            "font": ("Consolas", 9, "bold"),
-            "bg": BG, "fg": GREEN_DIM, "bd": 0, "relief": "flat",
-            "highlightthickness": 1, "highlightbackground": GREEN_DIM,
-            "padx": 8, "pady": 1, "cursor": "hand2",
-            "activebackground": GREEN_DRK, "activeforeground": GREEN_BRT
-        }
-        tk.Button(toolbar, text="ОБНОВИТЬ", command=self.reload_config,
-                  **btn_small).pack(side="left", padx=2)
-        tk.Button(toolbar, text="ОТКРЫТЬ SHIFTS.JSON", command=self.open_config,
-                  **btn_small).pack(side="left", padx=2)
-        tk.Button(toolbar, text="СЕГОДНЯ", command=self.go_today,
-                  **btn_small).pack(side="right", padx=2)
-
         # === Часы и информация — прижаты к низу ===
         clock_frame = tk.Frame(root, bg=BG)
-        clock_frame.pack(side="bottom", fill="x", pady=(0, 8))
+        clock_frame.pack(side="bottom", fill="x", pady=(0, 6))
 
         self.time_label = tk.Label(clock_frame, font=self.FONT_CLOCK,
                                    bg=BG, fg=GREEN)
@@ -163,23 +162,23 @@ class MatrixShiftCalendar:
             root, text="", font=self.FONT_INFO, bg=BG, fg=GREEN_BRT,
             wraplength=1000, justify="center"
         )
-        self.today_info.pack(side="bottom", fill="x", pady=(0, 4))
+        self.today_info.pack(side="bottom", fill="x", pady=(0, 3))
 
         # === Шапка дней недели ===
         self.head_frame = tk.Frame(root, bg=GREEN_DRK)
-        self.head_frame.pack(side="top", fill="x", padx=10, pady=(4, 0))
+        self.head_frame.pack(side="top", fill="x", padx=8, pady=(3, 0))
 
         days_short = ["ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС"]
         for i, d in enumerate(days_short):
             tk.Label(self.head_frame, text=d, font=self.FONT_HEAD,
-                     bg=GREEN_DRK, fg=GREEN_BRT, pady=3
+                     bg=GREEN_DRK, fg=GREEN_BRT, pady=2
                      ).grid(row=0, column=i, sticky="nsew")
             self.head_frame.grid_columnconfigure(i, weight=1)
 
         # === Сетка календаря ===
         self.grid_frame = tk.Frame(root, bg=GREEN_DIM)
         self.grid_frame.pack(side="top", fill="both", expand=True,
-                             padx=10, pady=(0, 4))
+                             padx=8, pady=(0, 3))
 
         self.build_calendar()
         self.update_clock()
@@ -342,7 +341,6 @@ class MatrixShiftCalendar:
                 head.pack(fill="x", pady=(2, 0))
 
                 if is_today:
-                    # Сегодня — число на цветной плашке
                     day_label = tk.Label(
                         head, text=str(day), font=self.FONT_DAY,
                         bg=team_color, fg=BG, padx=4
@@ -355,7 +353,6 @@ class MatrixShiftCalendar:
                     )
                 day_label.pack(side="left", padx=(5, 3))
 
-                # === Название праздника — СПРАВА от числа ===
                 if hol_name:
                     short = hol_name if len(hol_name) <= 22 else hol_name[:20] + "…"
                     tk.Label(
