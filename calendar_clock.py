@@ -267,7 +267,6 @@ class MatrixShiftCalendar:
         self.build_calendar()
         self.root.update_idletasks()
 
-        # Список смен с цветами
         teams_info = "\n".join(
             [f"  • {t['name']}: {t['color']}" for t in self.teams]
         )
@@ -332,30 +331,22 @@ class MatrixShiftCalendar:
                 cell = tk.Frame(cell_border, bg=bg)
                 cell.pack(fill="both", expand=True)
 
-                # === Шапка ячейки: число + цветной индикатор ===
+                # === Шапка ячейки: только число ===
                 head = tk.Frame(cell, bg=bg)
                 head.pack(fill="x", pady=(3, 0))
 
                 if is_today:
-                    # Сегодня — обводка вокруг числа
-                    day_label = tk.Label(
+                    # Сегодня — число на цветной плашке
+                    tk.Label(
                         head, text=str(day), font=self.FONT_DAY,
                         bg=team_color, fg=BG, padx=4
-                    )
+                    ).pack(side="left", padx=(5, 2))
                 else:
                     day_fg = RED if hol_name else team_color
-                    day_label = tk.Label(
+                    tk.Label(
                         head, text=str(day), font=self.FONT_DAY,
                         bg=bg, fg=day_fg
-                    )
-                day_label.pack(side="left", padx=(5, 2))
-
-                # === Название смены (в цвете) ===
-                if team:
-                    tk.Label(head, text=team["name"],
-                             font=("Consolas", max(7, int(self.ui["font_names"])-1)),
-                             bg=bg, fg=team_color
-                             ).pack(side="left", padx=(0, 2))
+                    ).pack(side="left", padx=(5, 2))
 
                 # === Праздник ===
                 if hol_name:
@@ -364,7 +355,7 @@ class MatrixShiftCalendar:
                              bg=bg, fg=RED, wraplength=140, justify="center"
                              ).pack(padx=3, anchor="w")
 
-                # === Фамилии ===
+                # === Фамилии смены (в цвете смены) ===
                 if team:
                     names_text = ", ".join(team["members"])
                     tk.Label(cell, text=names_text, font=self.FONT_NAME,
