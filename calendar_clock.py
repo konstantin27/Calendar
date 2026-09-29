@@ -1,4 +1,5 @@
 import tkinter as tk
+from tkinter import messagebox
 import calendar
 import json
 import os
@@ -196,20 +197,19 @@ class MatrixShiftCalendar:
         if not self.teams:
             self.teams = DEFAULT_CONFIG["teams"]
 
-        # Настройки UI — берём из конфига, недостающие поля — из DEFAULT_UI
         ui = self.config.get("ui", {}) or {}
         self.ui = {**DEFAULT_UI, **ui}
 
     def apply_fonts(self):
         u = self.ui
-        self.FONT_DAY   = ("Consolas", u["font_day"], "bold")
-        self.FONT_HOL   = ("Consolas", u["font_holiday"])
-        self.FONT_NAME  = ("Consolas", u["font_names"])
-        self.FONT_TITLE = ("Consolas", u["font_title"], "bold")
-        self.FONT_HEAD  = ("Consolas", u["font_head"], "bold")
-        self.FONT_CLOCK = ("Consolas", u["font_clock"], "bold")
-        self.FONT_DATE  = ("Consolas", u["font_date"], "bold")
-        self.FONT_INFO  = ("Consolas", u["font_info"], "bold")
+        self.FONT_DAY   = ("Consolas", int(u["font_day"]), "bold")
+        self.FONT_HOL   = ("Consolas", int(u["font_holiday"]))
+        self.FONT_NAME  = ("Consolas", int(u["font_names"]))
+        self.FONT_TITLE = ("Consolas", int(u["font_title"]), "bold")
+        self.FONT_HEAD  = ("Consolas", int(u["font_head"]), "bold")
+        self.FONT_CLOCK = ("Consolas", int(u["font_clock"]), "bold")
+        self.FONT_DATE  = ("Consolas", int(u["font_date"]), "bold")
+        self.FONT_INFO  = ("Consolas", int(u["font_info"]), "bold")
 
     def get_team_for_date(self, target_date):
         if not self.teams or self.shift_days < 1:
@@ -220,22 +220,67 @@ class MatrixShiftCalendar:
         return self.teams[pos // self.shift_days]
 
     def reload_config(self):
-        self.load_settings()
+        # Читаем файл, ловим ошибки
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                raw = f.read()
+            new_cfg = json.loads(raw)
+        except FileNotFoundError:
+            messagebox.showerror("ОШИБКА", f"Не найден файл:\n{CONFIG_FILE}")
+            return
+        except json.JSONDecodeError as e:
+            messagebox.showerror(
+                "ОШИБКА JSON",
+                f"В файле shifts.json опечатка:\n\n{e}\n\n"
+                f"Проверь запятые и кавычки."
+            )
+            return
+
+        # Применяем
+        self.config = new_cfg
+        try:
+            self.start_date = datetime.strptime(
+                self.config["start_date"], "%Y-%m-%d"
+            ).date()
+        except Exception:
+            self.start_date = date(2026, 1, 1)
+
+        self.shift_days = int(self.config.get("shift_days", 3))
+        self.teams = self.config.get("teams", []) or DEFAULT_CONFIG["teams"]
+
+        ui_from_file = self.config.get("ui", {}) or {}
+        self.ui = {**DEFAULT_UI, **ui_from_file}
         self.apply_fonts()
-        # Применяем новые размеры шрифтов ко всем виджетам
+
+        # Обновляем шрифты существующих виджетов
         self.title_label.config(font=self.FONT_TITLE)
         self.today_info.config(font=self.FONT_INFO)
         self.time_label.config(font=self.FONT_CLOCK)
         self.date_label.config(font=self.FONT_DATE)
-        # Обновляем размер окна
+        for w in self.head_frame.winfo_children():
+            w.config(font=self.FONT_HEAD)
+
+        # Размер окна
         self.root.geometry(
             f"{self.ui['window_width']}x{self.ui['window_height']}"
         )
         self.root.minsize(self.ui["min_width"], self.ui["min_height"])
-        # Перестраиваем шапку и календарь
-        for w in self.head_frame.winfo_children():
-            w.config(font=self.FONT_HEAD)
+
         self.build_calendar()
+        self.root.update_idletasks()
+
+        # Показываем, что реально загрузилось
+        messagebox.showinfo(
+            "НАСТРОЙКИ ОБНОВЛЕНЫ",
+            f"Файл: {CONFIG_FILE}\n\n"
+            f"Смен: {len(self.teams)}\n"
+            f"Начало цикла: {self.start_date}\n"
+            f"Длина смены: {self.shift_days} дн.\n\n"
+            f"Шрифт дня: {self.ui['font_day']}\n"
+            f"Шрифт фамилий: {self.ui['font_names']}\n"
+            f"Шрифт часов: {self.ui['font_clock']}\n"
+            f"Размер окна: {self.ui['window_width']}×{self.ui['window_height']}"
+        )
 
     def open_config(self):
         if not os.path.exists(CONFIG_FILE):
@@ -295,7 +340,8 @@ class MatrixShiftCalendar:
                          bg=bg, fg=day_fg).pack(side="left", padx=(6, 2))
 
                 if team and not is_today:
-                    tk.Label(head, text="■", font=("Consolas", self.ui["font_names"]),
+                    tk.Label(head, text="■",
+                             font=("Consolas", self.ui["font_names"]),
                              bg=bg, fg=team_color).pack(side="left")
 
                 if hol_name:
