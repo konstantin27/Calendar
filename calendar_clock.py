@@ -4,6 +4,7 @@ import calendar
 import json
 import os
 import sys
+import subprocess
 from datetime import datetime, date
 import holidays
 
@@ -52,7 +53,7 @@ DEFAULT_CONFIG = {
         "font_title": 16,
         "font_head": 10,
         "font_info": 10,
-        "today_border_width": 2
+        "today_border_width": 3
     }
 }
 
@@ -104,7 +105,6 @@ class MatrixShiftCalendar:
         self.root.minsize(self.ui["min_width"], self.ui["min_height"])
         self.root.resizable(True, True)
 
-        # === Полноэкранный режим ===
         self.is_fullscreen = False
         self.root.bind("<F11>", self.toggle_fullscreen)
         self.root.bind("<Escape>", self.exit_fullscreen)
@@ -153,7 +153,7 @@ class MatrixShiftCalendar:
                                     bg=BG, fg=GREEN)
         self.title_label.pack(side="left", expand=True)
 
-        # === Часы и информация — прижаты к низу ===
+        # === Часы и информация ===
         clock_frame = tk.Frame(root, bg=BG)
         clock_frame.pack(side="bottom", fill="x", pady=(0, 6))
 
@@ -296,7 +296,7 @@ class MatrixShiftCalendar:
              for t in self.teams]
         )
         mode = "столбиком" if self.names_in_column else "в строку"
-        bw = self.ui.get("today_border_width", 2)
+        bw = self.ui.get("today_border_width", 3)
 
         messagebox.showinfo(
             "НАСТРОЙКИ ОБНОВЛЕНЫ",
@@ -310,12 +310,40 @@ class MatrixShiftCalendar:
         )
 
     def open_config(self):
-        if not os.path.exists(CONFIG_FILE):
-            load_config()
+        """Открывает shifts.json в Блокноте."""
         try:
-            os.startfile(CONFIG_FILE)
+            # Если файла нет — создать
+            if not os.path.exists(CONFIG_FILE):
+                try:
+                    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+                        json.dump(DEFAULT_CONFIG, f, ensure_ascii=False, indent=2)
+                except Exception as e:
+                    messagebox.showerror(
+                        "ОШИБКА",
+                        f"Не удалось создать файл:\n{CONFIG_FILE}\n\n{e}"
+                    )
+                    return
+
+            # Способ 1: стандартный
+            try:
+                os.startfile(CONFIG_FILE)
+                return
+            except Exception:
+                pass
+
+            # Способ 2: явно через Блокнот
+            try:
+                subprocess.Popen(["notepad.exe", CONFIG_FILE])
+                return
+            except Exception as e2:
+                messagebox.showerror(
+                    "ОШИБКА",
+                    f"Не удалось открыть файл:\n{CONFIG_FILE}\n\n"
+                    f"Попробуй открыть его вручную из папки с программой.\n\n"
+                    f"Ошибка: {e2}"
+                )
         except Exception as e:
-            print("Не удалось открыть файл:", e)
+            messagebox.showerror("ОШИБКА", f"Что-то пошло не так:\n{e}")
 
     # ============ Календарь ============
     def build_calendar(self):
@@ -332,8 +360,8 @@ class MatrixShiftCalendar:
         while len(weeks) < 6:
             weeks.append([0] * 7)
 
-        # Толщина красной рамки (внутренний отступ внутри cell_border)
-        bw = int(self.ui.get("today_border_width", 2))
+        # Толщина красной рамки вокруг сегодня
+        bw = int(self.ui.get("today_border_width", 3))
 
         for row, week in enumerate(weeks):
             self.grid_frame.grid_rowconfigure(
@@ -358,23 +386,18 @@ class MatrixShiftCalendar:
                 team_color = team["color"] if team else GREEN_DIM
                 bg = BG_CELL
 
-                # === Рамка ячейки: красная для сегодня, толще ===
-                if is_today:
-                    border_color = RED
-                    outer_padx = bw
-                    outer_pady = bw
-                else:
-                    border_color = GREEN_DIM
-                    outer_padx = 1
-                    outer_pady = 1
-
+                # === Рамка ячейки ===
+                border_color = RED if is_today else GREEN_DIM
                 cell_border = tk.Frame(self.grid_frame, bg=border_color)
                 cell_border.grid(row=row, column=col,
-                                 padx=outer_padx, pady=outer_pady,
-                                 sticky="nsew")
+                                 padx=1, pady=1, sticky="nsew")
 
                 cell = tk.Frame(cell_border, bg=bg)
-                cell.pack(fill="both", expand=True)
+                if is_today:
+                    # ВНУТРЕННИЙ отступ bw — покажет красную рамку
+                    cell.pack(fill="both", expand=True, padx=bw, pady=bw)
+                else:
+                    cell.pack(fill="both", expand=True)
 
                 # === ВЕРХНЯЯ СТРОКА ===
                 head = tk.Frame(cell, bg=bg)
@@ -387,11 +410,10 @@ class MatrixShiftCalendar:
                     row=0, column=0, sticky="nsew")
 
                 day_fg = RED if hol_name else team_color
-                day_label = tk.Label(
+                tk.Label(
                     head, text=str(day), font=self.FONT_DAY,
                     bg=bg, fg=day_fg
-                )
-                day_label.grid(row=0, column=1)
+                ).grid(row=0, column=1)
 
                 if hol_name:
                     short = hol_name if len(hol_name) <= 16 else hol_name[:14] + "…"
