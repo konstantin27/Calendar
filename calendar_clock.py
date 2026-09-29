@@ -20,7 +20,8 @@ DEFAULT_CONFIG = {
     "_info1": "Фамилии, даты, цвета, размеры — всё здесь. После правки нажми ОБНОВИТЬ в программе.",
     "_info2": "start_date: начало цикла (ГГГГ-ММ-ДД). shift_days: сколько дней подряд работает смена (3 для 3/3).",
     "_info3": "names_in_column: true — фамилии столбиком, false — в строку через запятую.",
-    "_info4": "ЦВЕТА СМЕН: у каждой смены поле 'color'. Примеры: #ff9500 (оранжевый), #00bfff (голубой), #ffcc00 (жёлтый).",
+    "_info4": "ЦВЕТА СМЕН: у каждой смены поле 'color'. Примеры: #ff9500, #00bfff, #ffcc00.",
+    "_info5": "F11 — полный экран (без рамки Windows), Esc — выйти из полного экрана.",
     "start_date": "2026-01-01",
     "shift_days": 3,
     "names_in_column": True,
@@ -101,10 +102,15 @@ class MatrixShiftCalendar:
         self.root.minsize(self.ui["min_width"], self.ui["min_height"])
         self.root.resizable(True, True)
 
+        # === Полноэкранный режим ===
+        self.is_fullscreen = False
+        self.root.bind("<F11>", self.toggle_fullscreen)
+        self.root.bind("<Escape>", self.exit_fullscreen)
+
         now = datetime.now()
         self.year, self.month = now.year, now.month
 
-        # === ЕДИНАЯ ВЕРХНЯЯ ПАНЕЛЬ (всё в одну строку) ===
+        # === ЕДИНАЯ ВЕРХНЯЯ ПАНЕЛЬ ===
         top = tk.Frame(root, bg=BG)
         top.pack(side="top", fill="x", padx=8, pady=(5, 2))
 
@@ -127,12 +133,14 @@ class MatrixShiftCalendar:
             "activebackground": GREEN_DRK, "activeforeground": GREEN_BRT
         }
 
-        # Слева: ◀ [ОБН] [JSON]
+        # Слева: ◀ [ОБН] [JSON] [⛶]
         tk.Button(top, text="◀", command=self.prev_month,
                   **nav_btn_style).pack(side="left")
         tk.Button(top, text="ОБН", command=self.reload_config,
                   **btn_small).pack(side="left", padx=(3, 1))
         tk.Button(top, text="JSON", command=self.open_config,
+                  **btn_small).pack(side="left", padx=(0, 1))
+        tk.Button(top, text="⛶", command=self.toggle_fullscreen,
                   **btn_small).pack(side="left", padx=(0, 3))
 
         # Справа: [СЕГОДНЯ] ▶
@@ -160,7 +168,7 @@ class MatrixShiftCalendar:
 
         self.today_info = tk.Label(
             root, text="", font=self.FONT_INFO, bg=BG, fg=GREEN_BRT,
-            wraplength=1000, justify="center"
+            wraplength=1500, justify="center"
         )
         self.today_info.pack(side="bottom", fill="x", pady=(0, 3))
 
@@ -182,6 +190,19 @@ class MatrixShiftCalendar:
 
         self.build_calendar()
         self.update_clock()
+
+    # ============ Полноэкранный режим ============
+    def toggle_fullscreen(self, event=None):
+        self.is_fullscreen = not self.is_fullscreen
+        self.root.attributes("-fullscreen", self.is_fullscreen)
+        self.root.focus_set()
+        return "break"
+
+    def exit_fullscreen(self, event=None):
+        if self.is_fullscreen:
+            self.is_fullscreen = False
+            self.root.attributes("-fullscreen", False)
+        return "break"
 
     # ============ Настройки ============
     def load_settings(self):
@@ -283,8 +304,7 @@ class MatrixShiftCalendar:
             f"Фамилии: {mode}\n"
             f"Начало цикла: {self.start_date}\n"
             f"Длина смены: {self.shift_days} дн.\n\n"
-            f"Шрифт фамилий: {self.ui['font_names']}\n"
-            f"Высота ячейки: {self.ui['cell_min_height']}"
+            f"F11 — полный экран, Esc — выход"
         )
 
     def open_config(self):
@@ -370,7 +390,7 @@ class MatrixShiftCalendar:
                     tk.Label(
                         cell, text=names_text, font=self.FONT_NAME,
                         bg=bg, fg=team_color,
-                        wraplength=200, justify="left", anchor="nw"
+                        wraplength=250, justify="left", anchor="nw"
                     ).pack(padx=5, pady=(1, 2), anchor="nw",
                            fill="both", expand=True)
 
