@@ -12,11 +12,11 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install PyInstaller
-        run: pip install pyinstaller
+      - name: Install dependencies
+        run: pip install pyinstaller holidays
 
       - name: Build EXE
-        run: pyinstaller --onefile --noconsole --name "MatrixCalendar" calendar_clock.py
+        run: pyinstaller --onefile --noconsole --collect-all holidays --name "MatrixCalendar" calendar_clock.py
 
       - name: Upload EXE
         uses: actions/upload-artifact@v4
