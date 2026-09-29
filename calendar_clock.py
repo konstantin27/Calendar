@@ -17,9 +17,10 @@ def get_base_dir():
 CONFIG_FILE = os.path.join(get_base_dir(), "shifts.json")
 
 DEFAULT_CONFIG = {
-    "_info1": "Фамилии, даты и размеры — всё здесь. После правки нажми ОБНОВИТЬ в программе.",
+    "_info1": "Фамилии, даты и цвета — всё здесь. После правки нажми ОБНОВИТЬ в программе.",
     "_info2": "start_date: начало цикла (ГГГГ-ММ-ДД). shift_days: сколько дней подряд работает смена (3 для 3/3).",
     "_info3": "Блок ui: размеры окна и шрифтов. Увеличивай, если текст мелкий.",
+    "_info4": "ЦВЕТА СМЕН: у каждой смены поле 'color'. Меняй на любой HEX-код, например #ff9500 (оранжевый), #00bfff (голубой), #ff3333 (красный), #ffcc00 (жёлтый), #b366ff (фиолетовый).",
     "start_date": "2026-01-01",
     "shift_days": 3,
     "teams": [
@@ -45,7 +46,7 @@ DEFAULT_CONFIG = {
         "font_names": 9,
         "font_clock": 26,
         "font_date": 11,
-        "font_title": 18,
+        "font_title": 16,
         "font_head": 10,
         "font_info": 10
     }
@@ -102,51 +103,52 @@ class MatrixShiftCalendar:
         now = datetime.now()
         self.year, self.month = now.year, now.month
 
-        # === Верх: навигация + месяц ===
+        # === КОМПАКТНАЯ ВЕРХНЯЯ ПАНЕЛЬ ===
         top = tk.Frame(root, bg=BG)
-        top.pack(side="top", fill="x", padx=20, pady=(15, 5))
+        top.pack(side="top", fill="x", padx=10, pady=(6, 2))
 
-        nav_style = {
-            "font": ("Consolas", 16, "bold"),
+        nav_btn_style = {
+            "font": ("Consolas", 12, "bold"),
             "bg": BG, "fg": GREEN,
-            "bd": 1, "relief": "solid",
+            "bd": 0, "relief": "flat",
             "highlightthickness": 1,
             "highlightbackground": GREEN_DIM,
             "cursor": "hand2",
             "activebackground": GREEN_DRK,
             "activeforeground": GREEN_BRT,
+            "width": 2, "padx": 2, "pady": 0,
         }
         tk.Button(top, text="◀", command=self.prev_month,
-                  **nav_style, width=3).pack(side="left")
+                  **nav_btn_style).pack(side="left")
 
         self.title_label = tk.Label(top, font=self.FONT_TITLE,
                                     bg=BG, fg=GREEN)
         self.title_label.pack(side="left", expand=True)
 
         tk.Button(top, text="▶", command=self.next_month,
-                  **nav_style, width=3).pack(side="right")
+                  **nav_btn_style).pack(side="right")
 
-        # === Панель кнопок ===
+        # === Панель кнопок (компактная) ===
         toolbar = tk.Frame(root, bg=BG)
-        toolbar.pack(side="top", fill="x", padx=20, pady=(0, 5))
+        toolbar.pack(side="top", fill="x", padx=10, pady=(0, 4))
 
         btn_small = {
-            "font": ("Consolas", 10, "bold"),
-            "bg": BG, "fg": GREEN_DIM, "bd": 1, "relief": "solid",
+            "font": ("Consolas", 9, "bold"),
+            "bg": BG, "fg": GREEN_DIM, "bd": 0, "relief": "flat",
             "highlightthickness": 1, "highlightbackground": GREEN_DIM,
-            "padx": 10, "pady": 3, "cursor": "hand2",
+            "padx": 8, "pady": 1, "cursor": "hand2",
             "activebackground": GREEN_DRK, "activeforeground": GREEN_BRT
         }
         tk.Button(toolbar, text="ОБНОВИТЬ", command=self.reload_config,
-                  **btn_small).pack(side="left", padx=3)
+                  **btn_small).pack(side="left", padx=2)
         tk.Button(toolbar, text="ОТКРЫТЬ SHIFTS.JSON", command=self.open_config,
-                  **btn_small).pack(side="left", padx=3)
+                  **btn_small).pack(side="left", padx=2)
         tk.Button(toolbar, text="СЕГОДНЯ", command=self.go_today,
-                  **btn_small).pack(side="right", padx=3)
+                  **btn_small).pack(side="right", padx=2)
 
-        # === Часы и информация — ПРИЖАТЫ К НИЗУ (пакуем первыми) ===
+        # === Часы и информация — ПРИЖАТЫ К НИЗУ ===
         clock_frame = tk.Frame(root, bg=BG)
-        clock_frame.pack(side="bottom", fill="x", pady=(0, 10))
+        clock_frame.pack(side="bottom", fill="x", pady=(0, 8))
 
         self.time_label = tk.Label(clock_frame, font=self.FONT_CLOCK,
                                    bg=BG, fg=GREEN)
@@ -160,23 +162,23 @@ class MatrixShiftCalendar:
             root, text="", font=self.FONT_INFO, bg=BG, fg=GREEN_BRT,
             wraplength=1000, justify="center"
         )
-        self.today_info.pack(side="bottom", fill="x", pady=(0, 6))
+        self.today_info.pack(side="bottom", fill="x", pady=(0, 4))
 
         # === Шапка дней недели ===
         self.head_frame = tk.Frame(root, bg=GREEN_DRK)
-        self.head_frame.pack(side="top", fill="x", padx=20, pady=(8, 0))
+        self.head_frame.pack(side="top", fill="x", padx=10, pady=(4, 0))
 
         days_short = ["ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС"]
         for i, d in enumerate(days_short):
             tk.Label(self.head_frame, text=d, font=self.FONT_HEAD,
-                     bg=GREEN_DRK, fg=GREEN_BRT, pady=5
+                     bg=GREEN_DRK, fg=GREEN_BRT, pady=3
                      ).grid(row=0, column=i, sticky="nsew")
             self.head_frame.grid_columnconfigure(i, weight=1)
 
-        # === Сетка календаря — занимает ВСЁ оставшееся место ===
+        # === Сетка календаря ===
         self.grid_frame = tk.Frame(root, bg=GREEN_DIM)
         self.grid_frame.pack(side="top", fill="both", expand=True,
-                             padx=20, pady=(0, 6))
+                             padx=10, pady=(0, 4))
 
         self.build_calendar()
         self.update_clock()
@@ -265,10 +267,15 @@ class MatrixShiftCalendar:
         self.build_calendar()
         self.root.update_idletasks()
 
+        # Список смен с цветами
+        teams_info = "\n".join(
+            [f"  • {t['name']}: {t['color']}" for t in self.teams]
+        )
+
         messagebox.showinfo(
             "НАСТРОЙКИ ОБНОВЛЕНЫ",
             f"Файл: {CONFIG_FILE}\n\n"
-            f"Смен: {len(self.teams)}\n"
+            f"Смен: {len(self.teams)}\n{teams_info}\n\n"
             f"Начало цикла: {self.start_date}\n"
             f"Длина смены: {self.shift_days} дн.\n\n"
             f"Шрифт дня: {self.ui['font_day']}\n"
@@ -320,34 +327,48 @@ class MatrixShiftCalendar:
 
                 is_today = (d_obj == today)
                 team_color = team["color"] if team else GREEN_DIM
-                bg = GREEN if is_today else BG_CELL
+                bg = BG_CELL
 
                 cell = tk.Frame(cell_border, bg=bg)
                 cell.pack(fill="both", expand=True)
 
+                # === Шапка ячейки: число + цветной индикатор ===
                 head = tk.Frame(cell, bg=bg)
                 head.pack(fill="x", pady=(3, 0))
 
-                day_fg = BG if is_today else (RED if hol_name else team_color)
-                tk.Label(head, text=str(day), font=self.FONT_DAY,
-                         bg=bg, fg=day_fg).pack(side="left", padx=(6, 2))
+                if is_today:
+                    # Сегодня — обводка вокруг числа
+                    day_label = tk.Label(
+                        head, text=str(day), font=self.FONT_DAY,
+                        bg=team_color, fg=BG, padx=4
+                    )
+                else:
+                    day_fg = RED if hol_name else team_color
+                    day_label = tk.Label(
+                        head, text=str(day), font=self.FONT_DAY,
+                        bg=bg, fg=day_fg
+                    )
+                day_label.pack(side="left", padx=(5, 2))
 
-                if team and not is_today:
-                    tk.Label(head, text="■",
-                             font=("Consolas", int(self.ui["font_names"])),
-                             bg=bg, fg=team_color).pack(side="left")
+                # === Название смены (в цвете) ===
+                if team:
+                    tk.Label(head, text=team["name"],
+                             font=("Consolas", max(7, int(self.ui["font_names"])-1)),
+                             bg=bg, fg=team_color
+                             ).pack(side="left", padx=(0, 2))
 
+                # === Праздник ===
                 if hol_name:
                     short = hol_name if len(hol_name) <= 32 else hol_name[:30] + "…"
                     tk.Label(cell, text=short, font=self.FONT_HOL,
                              bg=bg, fg=RED, wraplength=140, justify="center"
                              ).pack(padx=3, anchor="w")
 
+                # === Фамилии ===
                 if team:
                     names_text = ", ".join(team["members"])
-                    txt_fg = BG if is_today else team_color
                     tk.Label(cell, text=names_text, font=self.FONT_NAME,
-                             bg=bg, fg=txt_fg,
+                             bg=bg, fg=team_color,
                              wraplength=140, justify="left", anchor="nw"
                              ).pack(padx=5, pady=(2, 3), anchor="nw",
                                     fill="both", expand=True)
