@@ -17,33 +17,35 @@ def get_base_dir():
 CONFIG_FILE = os.path.join(get_base_dir(), "shifts.json")
 
 DEFAULT_CONFIG = {
-    "_info1": "Фамилии, даты и цвета — всё здесь. После правки нажми ОБНОВИТЬ в программе.",
+    "_info1": "Фамилии, даты, цвета, размеры — всё здесь. После правки нажми ОБНОВИТЬ в программе.",
     "_info2": "start_date: начало цикла (ГГГГ-ММ-ДД). shift_days: сколько дней подряд работает смена (3 для 3/3).",
-    "_info3": "Блок ui: размеры окна и шрифтов. Увеличивай, если текст мелкий.",
-    "_info4": "ЦВЕТА СМЕН: у каждой смены поле 'color'. Меняй на любой HEX-код, например #ff9500 (оранжевый), #00bfff (голубой), #ff3333 (красный), #ffcc00 (жёлтый), #b366ff (фиолетовый).",
+    "_info3": "names_in_column: true — фамилии столбиком (компактно), false — в строку через запятую.",
+    "_info4": "ЦВЕТА СМЕН: у каждой смены поле 'color'. Примеры: #ff9500 (оранжевый), #00bfff (голубой), #ffcc00 (жёлтый).",
+    "_info5": "Клик по любому дню в календаре — откроется окно со всеми фамилиями крупно.",
     "start_date": "2026-01-01",
     "shift_days": 3,
+    "names_in_column": True,
     "teams": [
         {
             "name": "Смена 1",
             "color": "#00ff41",
-            "members": ["Иванов И.", "Петров П.", "Сидоров С."]
+            "members": ["Иванов И.", "Петров П.", "Сидоров С.", "Морозов М."]
         },
         {
             "name": "Смена 2",
             "color": "#00bfff",
-            "members": ["Кузнецов К.", "Смирнов С.", "Волков В."]
+            "members": ["Кузнецов К.", "Смирнов С.", "Волков В.", "Соколов С."]
         }
     ],
     "ui": {
-        "window_width": 1000,
-        "window_height": 850,
-        "min_width": 700,
-        "min_height": 600,
-        "cell_min_height": 40,
+        "window_width": 1100,
+        "window_height": 900,
+        "min_width": 800,
+        "min_height": 650,
+        "cell_min_height": 60,
         "font_day": 16,
         "font_holiday": 7,
-        "font_names": 9,
+        "font_names": 8,
         "font_clock": 26,
         "font_date": 11,
         "font_title": 16,
@@ -103,7 +105,7 @@ class MatrixShiftCalendar:
         now = datetime.now()
         self.year, self.month = now.year, now.month
 
-        # === КОМПАКТНАЯ ВЕРХНЯЯ ПАНЕЛЬ ===
+        # === Верхняя панель ===
         top = tk.Frame(root, bg=BG)
         top.pack(side="top", fill="x", padx=10, pady=(6, 2))
 
@@ -128,7 +130,7 @@ class MatrixShiftCalendar:
         tk.Button(top, text="▶", command=self.next_month,
                   **nav_btn_style).pack(side="right")
 
-        # === Панель кнопок (компактная) ===
+        # === Панель кнопок ===
         toolbar = tk.Frame(root, bg=BG)
         toolbar.pack(side="top", fill="x", padx=10, pady=(0, 4))
 
@@ -146,7 +148,7 @@ class MatrixShiftCalendar:
         tk.Button(toolbar, text="СЕГОДНЯ", command=self.go_today,
                   **btn_small).pack(side="right", padx=2)
 
-        # === Часы и информация — ПРИЖАТЫ К НИЗУ ===
+        # === Часы и информация — прижаты к низу ===
         clock_frame = tk.Frame(root, bg=BG)
         clock_frame.pack(side="bottom", fill="x", pady=(0, 8))
 
@@ -199,6 +201,8 @@ class MatrixShiftCalendar:
         if not self.teams:
             self.teams = DEFAULT_CONFIG["teams"]
 
+        self.names_in_column = bool(self.config.get("names_in_column", True))
+
         ui = self.config.get("ui", {}) or {}
         self.ui = {**DEFAULT_UI, **ui}
 
@@ -247,6 +251,7 @@ class MatrixShiftCalendar:
 
         self.shift_days = int(self.config.get("shift_days", 3))
         self.teams = self.config.get("teams", []) or DEFAULT_CONFIG["teams"]
+        self.names_in_column = bool(self.config.get("names_in_column", True))
 
         ui_from_file = self.config.get("ui", {}) or {}
         self.ui = {**DEFAULT_UI, **ui_from_file}
@@ -268,19 +273,20 @@ class MatrixShiftCalendar:
         self.root.update_idletasks()
 
         teams_info = "\n".join(
-            [f"  • {t['name']}: {t['color']}" for t in self.teams]
+            [f"  • {t['name']}: {t['color']} — {len(t['members'])} чел."
+             for t in self.teams]
         )
+        mode = "столбиком" if self.names_in_column else "в строку"
 
         messagebox.showinfo(
             "НАСТРОЙКИ ОБНОВЛЕНЫ",
             f"Файл: {CONFIG_FILE}\n\n"
             f"Смен: {len(self.teams)}\n{teams_info}\n\n"
+            f"Фамилии: {mode}\n"
             f"Начало цикла: {self.start_date}\n"
             f"Длина смены: {self.shift_days} дн.\n\n"
-            f"Шрифт дня: {self.ui['font_day']}\n"
             f"Шрифт фамилий: {self.ui['font_names']}\n"
-            f"Шрифт часов: {self.ui['font_clock']}\n"
-            f"Размер окна: {self.ui['window_width']}×{self.ui['window_height']}"
+            f"Высота ячейки: {self.ui['cell_min_height']}"
         )
 
     def open_config(self):
@@ -307,7 +313,8 @@ class MatrixShiftCalendar:
             weeks.append([0] * 7)
 
         for row, week in enumerate(weeks):
-            self.grid_frame.grid_rowconfigure(row, weight=1, minsize=40)
+            self.grid_frame.grid_rowconfigure(
+                row, weight=1, minsize=self.ui["cell_min_height"])
             for col, day in enumerate(week):
                 self.grid_frame.grid_columnconfigure(col, weight=1)
 
@@ -328,43 +335,153 @@ class MatrixShiftCalendar:
                 team_color = team["color"] if team else GREEN_DIM
                 bg = BG_CELL
 
-                cell = tk.Frame(cell_border, bg=bg)
+                # --- Кликабельная ячейка ---
+                cell = tk.Frame(cell_border, bg=bg, cursor="hand2")
                 cell.pack(fill="both", expand=True)
+
+                # Сохраняем данные для клика
+                cell_data = {
+                    "day": day,
+                    "date": d_obj,
+                    "team": team,
+                    "holiday": hol_name,
+                    "is_today": is_today,
+                }
+                self.bind_click_recursive(cell, cell_data)
 
                 # === Шапка ячейки: только число ===
                 head = tk.Frame(cell, bg=bg)
                 head.pack(fill="x", pady=(3, 0))
+                self.bind_click_recursive(head, cell_data)
 
                 if is_today:
-                    # Сегодня — число на цветной плашке
-                    tk.Label(
+                    day_label = tk.Label(
                         head, text=str(day), font=self.FONT_DAY,
-                        bg=team_color, fg=BG, padx=4
-                    ).pack(side="left", padx=(5, 2))
+                        bg=team_color, fg=BG, padx=4, cursor="hand2"
+                    )
                 else:
                     day_fg = RED if hol_name else team_color
-                    tk.Label(
+                    day_label = tk.Label(
                         head, text=str(day), font=self.FONT_DAY,
-                        bg=bg, fg=day_fg
-                    ).pack(side="left", padx=(5, 2))
+                        bg=bg, fg=day_fg, cursor="hand2"
+                    )
+                day_label.pack(side="left", padx=(5, 2))
+                self.bind_click_recursive(day_label, cell_data)
 
                 # === Праздник ===
                 if hol_name:
                     short = hol_name if len(hol_name) <= 32 else hol_name[:30] + "…"
-                    tk.Label(cell, text=short, font=self.FONT_HOL,
-                             bg=bg, fg=RED, wraplength=140, justify="center"
-                             ).pack(padx=3, anchor="w")
+                    lbl = tk.Label(cell, text=short, font=self.FONT_HOL,
+                                   bg=bg, fg=RED, wraplength=140,
+                                   justify="center", cursor="hand2")
+                    lbl.pack(padx=3, anchor="w")
+                    self.bind_click_recursive(lbl, cell_data)
 
-                # === Фамилии смены (в цвете смены) ===
+                # === Фамилии ===
                 if team:
-                    names_text = ", ".join(team["members"])
-                    tk.Label(cell, text=names_text, font=self.FONT_NAME,
-                             bg=bg, fg=team_color,
-                             wraplength=140, justify="left", anchor="nw"
-                             ).pack(padx=5, pady=(2, 3), anchor="nw",
-                                    fill="both", expand=True)
+                    if self.names_in_column:
+                        names_text = "\n".join(team["members"])
+                        wrap = 200
+                    else:
+                        names_text = ", ".join(team["members"])
+                        wrap = 200
+
+                    names_lbl = tk.Label(
+                        cell, text=names_text, font=self.FONT_NAME,
+                        bg=bg, fg=team_color,
+                        wraplength=wrap, justify="left", anchor="nw",
+                        cursor="hand2"
+                    )
+                    names_lbl.pack(padx=5, pady=(2, 3), anchor="nw",
+                                   fill="both", expand=True)
+                    self.bind_click_recursive(names_lbl, cell_data)
 
         self.update_today_info()
+
+    def bind_click_recursive(self, widget, data):
+        """Навешивает обработчик клика на виджет и всех его потомков."""
+        widget.bind("<Button-1>", lambda e, d=data: self.show_day_details(d))
+        for child in widget.winfo_children():
+            self.bind_click_recursive(child, data)
+
+    # ============ Окно деталей дня ============
+    def show_day_details(self, data):
+        d = data["date"]
+        team = data["team"]
+        hol = data["holiday"]
+
+        win = tk.Toplevel(self.root)
+        win.title(f"День {d.day:02d}.{d.month:02d}.{d.year}")
+        win.configure(bg=BG)
+        win.geometry("500x480")
+        win.transient(self.root)
+        win.resizable(False, False)
+
+        # Заголовок
+        weekday = WEEKDAYS_RU[d.weekday()]
+        month = MONTHS_RU_GEN[d.month - 1]
+        tk.Label(
+            win, text=f"{weekday}",
+            font=("Consolas", 16, "bold"), bg=BG, fg=GREEN
+        ).pack(pady=(20, 0))
+        tk.Label(
+            win, text=f"{d.day} {month} {d.year}",
+            font=("Consolas", 20, "bold"), bg=BG, fg=GREEN_BRT
+        ).pack(pady=(0, 15))
+
+        tk.Label(
+            win, text="───────────────────────",
+            font=("Consolas", 12), bg=BG, fg=GREEN_DIM
+        ).pack()
+
+        # Праздник
+        if hol:
+            tk.Label(
+                win, text=f"🎉 {hol}",
+                font=("Consolas", 13, "bold"), bg=BG, fg=RED,
+                wraplength=460, justify="center"
+            ).pack(pady=(15, 5))
+
+        # Смена
+        if team:
+            team_color = team["color"]
+            tk.Label(
+                win, text=team["name"].upper(),
+                font=("Consolas", 16, "bold"), bg=BG, fg=team_color
+            ).pack(pady=(15, 5))
+
+            tk.Label(
+                win, text="На смене:",
+                font=("Consolas", 11), bg=BG, fg=GREEN_DIM
+            ).pack(pady=(5, 8))
+
+            # Фамилии крупно — каждая с новой строки
+            for member in team["members"]:
+                tk.Label(
+                    win, text=f"  ▸  {member}",
+                    font=("Consolas", 16, "bold"),
+                    bg=BG, fg=team_color, anchor="w"
+                ).pack(fill="x", padx=80, pady=3)
+        else:
+            tk.Label(
+                win, text="ВЫХОДНОЙ",
+                font=("Consolas", 18, "bold"), bg=BG, fg=GREEN_DIM
+            ).pack(pady=30)
+
+        # Кнопка закрыть
+        tk.Button(
+            win, text="[ ЗАКРЫТЬ ]",
+            font=("Consolas", 11, "bold"),
+            bg=BG, fg=GREEN, bd=1, relief="solid",
+            highlightthickness=1, highlightbackground=GREEN_DIM,
+            padx=20, pady=5, cursor="hand2",
+            activebackground=GREEN_DRK, activeforeground=GREEN_BRT,
+            command=win.destroy
+        ).pack(side="bottom", pady=20)
+
+        # Закрытие по Esc
+        win.bind("<Escape>", lambda e: win.destroy())
+        win.focus_force()
 
     def update_today_info(self):
         today = date.today()
