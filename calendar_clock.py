@@ -73,6 +73,18 @@ def load_config():
         return DEFAULT_CONFIG
 
 
+def dim_hex(hex_color, factor=0.55):
+    """Затемняет HEX-цвет на заданный коэффициент (0..1)."""
+    hex_color = hex_color.lstrip("#")
+    r = int(hex_color[0:2], 16)
+    g = int(hex_color[2:4], 16)
+    b = int(hex_color[4:6], 16)
+    r = max(0, min(255, int(r * factor)))
+    g = max(0, min(255, int(g * factor)))
+    b = max(0, min(255, int(b * factor)))
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
 # === Матричная палитра ===
 BG          = "#000000"
 BG_CELL     = "#050505"
@@ -81,7 +93,7 @@ GREEN_BRT   = "#7fff7f"
 GREEN_DIM   = "#008f11"
 GREEN_DRK   = "#003b00"
 RED         = "#ff3333"
-OTHER_MONTH = "#005500"   # цвет дней соседних месяцев
+OTHER_MONTH = "#005500"   # цвет числа дней соседних месяцев
 
 WEEKDAYS_RU = ["ПОНЕДЕЛЬНИК", "ВТОРНИК", "СРЕДА", "ЧЕТВЕРГ",
                "ПЯТНИЦА", "СУББОТА", "ВОСКРЕСЕНЬЕ"]
@@ -345,7 +357,6 @@ class MatrixShiftCalendar:
 
         today = date.today()
 
-        # Первый день месяца и количество дней в месяце
         first_day = date(self.year, self.month, 1)
         if self.month == 12:
             first_day_next = date(self.year + 1, 1, 1)
@@ -353,12 +364,9 @@ class MatrixShiftCalendar:
             first_day_next = date(self.year, self.month + 1, 1)
         days_in_month = (first_day_next - first_day).days
 
-        # С какого столбца начинается месяц (0 = ПН)
         first_weekday = first_day.weekday()
-
         bw = int(self.ui.get("today_border_width", 3))
 
-        # 6 строк × 7 столбцов = 42 ячейки (всегда)
         for row in range(6):
             self.grid_frame.grid_rowconfigure(
                 row, weight=1, minsize=self.ui["cell_min_height"])
@@ -366,55 +374,36 @@ class MatrixShiftCalendar:
                 self.grid_frame.grid_columnconfigure(
                     col, weight=1, uniform="days")
 
-                idx = row * 7 + col   # индекс ячейки: 0..41
+                idx = row * 7 + col
 
                 if idx < first_weekday:
-                    # Дни предыдущего месяца — приглушённо
                     cell_date = first_day - timedelta(days=first_weekday - idx)
-                    self._draw_other_day(row, col, cell_date)
+                    self._draw_day(row, col, cell_date, today, bw,
+                                   is_other_month=True)
                 elif idx < first_weekday + days_in_month:
-                    # Дни текущего месяца — обычные
                     cell_date = date(
                         self.year, self.month, idx - first_weekday + 1)
-                    self._draw_current_day(row, col, cell_date, today, bw)
+                    self._draw_day(row, col, cell_date, today, bw,
+                                   is_other_month=False)
                 else:
-                    # Дни следующего месяца — приглушённо
                     cell_date = first_day + timedelta(days=idx - first_weekday)
-                    self._draw_other_day(row, col, cell_date)
+                    self._draw_day(row, col, cell_date, today, bw,
+                                   is_other_month=True)
 
-    def _draw_other_day(self, row, col, cell_date):
-        """Ячейка дня из соседнего месяца — только число, тускло."""
-        cell_border = tk.Frame(self.grid_frame, bg=GREEN_DIM)
-        cell_border.grid(row=row, column=col,
-                         padx=1, pady=1, sticky="nsew")
-
-        cell = tk.Frame(cell_border, bg=BG_CELL)
-        cell.pack(fill="both", expand=True)
-
-        head = tk.Frame(cell, bg=BG_CELL)
-        head.pack(fill="x", pady=(2, 0))
-        head.grid_columnconfigure(0, weight=1)
-        head.grid_columnconfigure(1, weight=0)
-        head.grid_columnconfigure(2, weight=1)
-
-        tk.Label(head, text="", bg=BG_CELL).grid(
-            row=0, column=0, sticky="nsew")
-        tk.Label(head, text=str(cell_date.day), font=self.FONT_DAY,
-                 bg=BG_CELL, fg=OTHER_MONTH).grid(row=0, column=1)
-        tk.Label(head, text="", bg=BG_CELL).grid(
-            row=0, column=2, sticky="nsew")
-
-    def _draw_current_day(self, row, col, cell_date, today, bw):
-        """Ячейка дня текущего месяца — с числом, сменой, праздником."""
+    def _draw_day(self, row, col, cell_date, today, bw, is_other_month):
+        """Отрисовка одной ячейки дня. is_other_month = True для дней соседних месяцев."""
         hol_name = RU_HOLIDAYS.get(cell_date)
         team = self.get_team_for_date(cell_date)
 
-        is_today = (cell_date == today)
-        team_color = team["color"] if team else GREEN_DIM
+        is_today = (cell_date == today) and not is_other_month
         bg = BG_CELL
 
-        # Рамка: красная для сегодня, зелёная для остальных
-        border_color = RED if is_today else GREEN_DIM
+        # === Рамка ячейки ===
+        if is_today:
+            border_color = RED
+        else:
+            border_color = GREEN_DIM
+
         cell_border = tk.Frame(self.grid_frame, bg=border_color)
         cell_border.grid(row=row, column=col,
                          padx=1, pady=1, sticky="nsew")
@@ -434,17 +423,26 @@ class MatrixShiftCalendar:
 
         tk.Label(head, text="", bg=bg).grid(row=0, column=0, sticky="nsew")
 
-        day_fg = RED if hol_name else team_color
+        # Цвет числа
+        if is_other_month:
+            day_fg = OTHER_MONTH
+        elif hol_name:
+            day_fg = RED
+        else:
+            day_fg = team["color"] if team else GREEN_DIM
+
         tk.Label(
             head, text=str(cell_date.day), font=self.FONT_DAY,
             bg=bg, fg=day_fg
         ).grid(row=0, column=1)
 
+        # Праздник
         if hol_name:
             short = hol_name if len(hol_name) <= 16 else hol_name[:14] + "…"
+            hol_fg = dim_hex(RED, 0.55) if is_other_month else RED
             tk.Label(
                 head, text=short, font=self.FONT_HOL,
-                bg=bg, fg=RED, anchor="e"
+                bg=bg, fg=hol_fg, anchor="e"
             ).grid(row=0, column=2, sticky="e", padx=(0, 4))
 
         # === Фамилии смены ===
@@ -454,9 +452,15 @@ class MatrixShiftCalendar:
             else:
                 names_text = ", ".join(team["members"])
 
+            # Цвет фамилий: обычный или приглушённый
+            if is_other_month:
+                names_fg = dim_hex(team["color"], 0.55)
+            else:
+                names_fg = team["color"]
+
             tk.Label(
                 cell, text=names_text, font=self.FONT_NAME,
-                bg=bg, fg=team_color,
+                bg=bg, fg=names_fg,
                 wraplength=250, justify="center", anchor="n"
             ).pack(padx=5, pady=(1, 2), anchor="n",
                    fill="both", expand=True)
