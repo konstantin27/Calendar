@@ -53,7 +53,8 @@ DEFAULT_CONFIG = {
         "font_date": 11,
         "font_title": 16,
         "font_head": 10,
-        "today_border_width": 3
+        "today_border_width": 3,
+        "other_month_dim": 0.55
     }
 }
 
@@ -93,7 +94,7 @@ GREEN_BRT   = "#7fff7f"
 GREEN_DIM   = "#008f11"
 GREEN_DRK   = "#003b00"
 RED         = "#ff3333"
-OTHER_MONTH = "#005500"
+OTHER_MONTH = "#005500"   # для дней без смены (выходные в чужом месяце)
 
 WEEKDAYS_RU = ["ПОНЕДЕЛЬНИК", "ВТОРНИК", "СРЕДА", "ЧЕТВЕРГ",
                "ПЯТНИЦА", "СУББОТА", "ВОСКРЕСЕНЬЕ"]
@@ -124,11 +125,10 @@ class MatrixShiftCalendar:
         self.root.bind("<Left>",   self.key_prev_month)
         self.root.bind("<Right>",  self.key_next_month)
         self.root.bind("<Return>", self.key_today)
-        self.root.bind("<KP_Enter>", self.key_today)   # Enter на цифровой панели
+        self.root.bind("<KP_Enter>", self.key_today)
         self.root.bind("<F11>",    self.toggle_fullscreen)
         self.root.bind("<Escape>", self.exit_fullscreen)
 
-        # Фокус на окне, чтобы клавиши сразу работали
         self.root.focus_set()
 
         now = datetime.now()
@@ -417,6 +417,7 @@ class MatrixShiftCalendar:
 
         is_today = (cell_date == today) and not is_other_month
         bg = BG_CELL
+        dim_factor = float(self.ui.get("other_month_dim", 0.55))
 
         border_color = RED if is_today else GREEN_DIM
         cell_border = tk.Frame(self.grid_frame, bg=border_color)
@@ -437,33 +438,45 @@ class MatrixShiftCalendar:
 
         tk.Label(head, text="", bg=bg).grid(row=0, column=0, sticky="nsew")
 
+        # === ЦВЕТ ЧИСЛА ===
         if is_other_month:
-            day_fg = OTHER_MONTH
-        elif hol_name:
-            day_fg = RED
+            # День соседнего месяца — цвет числа зависит от смены или праздника
+            if hol_name:
+                day_fg = dim_hex(RED, dim_factor)
+            elif team:
+                day_fg = dim_hex(team["color"], dim_factor)
+            else:
+                day_fg = OTHER_MONTH
         else:
-            day_fg = team["color"] if team else GREEN_DIM
+            # День текущего месяца — яркие цвета
+            if hol_name:
+                day_fg = RED
+            else:
+                day_fg = team["color"] if team else GREEN_DIM
 
         tk.Label(
             head, text=str(cell_date.day), font=self.FONT_DAY,
             bg=bg, fg=day_fg
         ).grid(row=0, column=1)
 
+        # === ПРАЗДНИК ===
         if hol_name:
             short = hol_name if len(hol_name) <= 16 else hol_name[:14] + "…"
-            hol_fg = dim_hex(RED, 0.55) if is_other_month else RED
+            hol_fg = dim_hex(RED, dim_factor) if is_other_month else RED
             tk.Label(
                 head, text=short, font=self.FONT_HOL,
                 bg=bg, fg=hol_fg, anchor="e"
             ).grid(row=0, column=2, sticky="e", padx=(0, 4))
 
+        # === ФАМИЛИИ ===
         if team:
             if self.names_in_column:
                 names_text = "\n".join(team["members"])
             else:
                 names_text = ", ".join(team["members"])
 
-            names_fg = dim_hex(team["color"], 0.55) if is_other_month else team["color"]
+            names_fg = (dim_hex(team["color"], dim_factor)
+                        if is_other_month else team["color"])
 
             tk.Label(
                 cell, text=names_text, font=self.FONT_NAME,
