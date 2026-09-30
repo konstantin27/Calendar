@@ -52,7 +52,6 @@ DEFAULT_CONFIG = {
         "font_date": 11,
         "font_title": 16,
         "font_head": 10,
-        "font_info": 10,
         "today_border_width": 3
     }
 }
@@ -153,9 +152,9 @@ class MatrixShiftCalendar:
                                     bg=BG, fg=GREEN)
         self.title_label.pack(side="left", expand=True)
 
-        # === Часы и информация ===
+        # === Часы (прижаты к низу) ===
         clock_frame = tk.Frame(root, bg=BG)
-        clock_frame.pack(side="bottom", fill="x", pady=(0, 6))
+        clock_frame.pack(side="bottom", fill="x", pady=(4, 8))
 
         self.time_label = tk.Label(clock_frame, font=self.FONT_CLOCK,
                                    bg=BG, fg=GREEN)
@@ -164,12 +163,6 @@ class MatrixShiftCalendar:
         self.date_label = tk.Label(clock_frame, font=self.FONT_DATE,
                                    bg=BG, fg=GREEN_DIM)
         self.date_label.pack()
-
-        self.today_info = tk.Label(
-            root, text="", font=self.FONT_INFO, bg=BG, fg=GREEN_BRT,
-            wraplength=1500, justify="center"
-        )
-        self.today_info.pack(side="bottom", fill="x", pady=(0, 3))
 
         # === Шапка дней недели ===
         self.head_frame = tk.Frame(root, bg=GREEN_DRK)
@@ -234,7 +227,6 @@ class MatrixShiftCalendar:
         self.FONT_HEAD  = ("Consolas", int(u["font_head"]), "bold")
         self.FONT_CLOCK = ("Consolas", int(u["font_clock"]), "bold")
         self.FONT_DATE  = ("Consolas", int(u["font_date"]), "bold")
-        self.FONT_INFO  = ("Consolas", int(u["font_info"]), "bold")
 
     def get_team_for_date(self, target_date):
         if not self.teams or self.shift_days < 1:
@@ -277,7 +269,6 @@ class MatrixShiftCalendar:
         self.apply_fonts()
 
         self.title_label.config(font=self.FONT_TITLE)
-        self.today_info.config(font=self.FONT_INFO)
         self.time_label.config(font=self.FONT_CLOCK)
         self.date_label.config(font=self.FONT_DATE)
         for w in self.head_frame.winfo_children():
@@ -312,7 +303,6 @@ class MatrixShiftCalendar:
     def open_config(self):
         """Открывает shifts.json в Блокноте."""
         try:
-            # Если файла нет — создать
             if not os.path.exists(CONFIG_FILE):
                 try:
                     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
@@ -324,14 +314,12 @@ class MatrixShiftCalendar:
                     )
                     return
 
-            # Способ 1: стандартный
             try:
                 os.startfile(CONFIG_FILE)
                 return
             except Exception:
                 pass
 
-            # Способ 2: явно через Блокнот
             try:
                 subprocess.Popen(["notepad.exe", CONFIG_FILE])
                 return
@@ -360,7 +348,6 @@ class MatrixShiftCalendar:
         while len(weeks) < 6:
             weeks.append([0] * 7)
 
-        # Толщина красной рамки вокруг сегодня
         bw = int(self.ui.get("today_border_width", 3))
 
         for row, week in enumerate(weeks):
@@ -394,7 +381,6 @@ class MatrixShiftCalendar:
 
                 cell = tk.Frame(cell_border, bg=bg)
                 if is_today:
-                    # ВНУТРЕННИЙ отступ bw — покажет красную рамку
                     cell.pack(fill="both", expand=True, padx=bw, pady=bw)
                 else:
                     cell.pack(fill="both", expand=True)
@@ -435,23 +421,6 @@ class MatrixShiftCalendar:
                         wraplength=250, justify="center", anchor="n"
                     ).pack(padx=5, pady=(1, 2), anchor="n",
                            fill="both", expand=True)
-
-        self.update_today_info()
-
-    def update_today_info(self):
-        today = date.today()
-        team = self.get_team_for_date(today)
-        hol = RU_HOLIDAYS.get(today)
-
-        if team:
-            line = f"СЕГОДНЯ НА СМЕНЕ: {team['name']}  ▸  {', '.join(team['members'])}"
-        else:
-            line = "СЕГОДНЯ: выходной"
-
-        if hol:
-            line = f"🎉 {hol}   |   " + line
-
-        self.today_info.config(text=line)
 
     # ============ Часы ============
     def update_clock(self):
