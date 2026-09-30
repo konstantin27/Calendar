@@ -22,7 +22,7 @@ DEFAULT_CONFIG = {
     "_info2": "start_date: начало цикла (ГГГГ-ММ-ДД). shift_days: сколько дней подряд работает смена (3 для 3/3).",
     "_info3": "names_in_column: true — фамилии столбиком, false — в строку через запятую.",
     "_info4": "ЦВЕТА СМЕН: у каждой смены поле 'color'. Примеры: #ff9500, #00bfff, #ffcc00.",
-    "_info5": "F11 — полный экран (без рамки Windows), Esc — выйти из полного экрана.",
+    "_info5": "КЛАВИАТУРА: ←/→ листать месяцы, Enter — сегодня, F11 — полный экран, Esc — выход из него.",
     "_info6": "today_border_width: толщина красной рамки вокруг сегодняшнего дня (в пикселях).",
     "_info7": "Пустые ячейки в начале и конце месяца заполняются днями соседних месяцев (приглушённым цветом).",
     "start_date": "2026-01-01",
@@ -93,7 +93,7 @@ GREEN_BRT   = "#7fff7f"
 GREEN_DIM   = "#008f11"
 GREEN_DRK   = "#003b00"
 RED         = "#ff3333"
-OTHER_MONTH = "#005500"   # цвет числа дней соседних месяцев
+OTHER_MONTH = "#005500"
 
 WEEKDAYS_RU = ["ПОНЕДЕЛЬНИК", "ВТОРНИК", "СРЕДА", "ЧЕТВЕРГ",
                "ПЯТНИЦА", "СУББОТА", "ВОСКРЕСЕНЬЕ"]
@@ -119,8 +119,17 @@ class MatrixShiftCalendar:
         self.root.resizable(True, True)
 
         self.is_fullscreen = False
-        self.root.bind("<F11>", self.toggle_fullscreen)
+
+        # === Горячие клавиши ===
+        self.root.bind("<Left>",   self.key_prev_month)
+        self.root.bind("<Right>",  self.key_next_month)
+        self.root.bind("<Return>", self.key_today)
+        self.root.bind("<KP_Enter>", self.key_today)   # Enter на цифровой панели
+        self.root.bind("<F11>",    self.toggle_fullscreen)
         self.root.bind("<Escape>", self.exit_fullscreen)
+
+        # Фокус на окне, чтобы клавиши сразу работали
+        self.root.focus_set()
 
         now = datetime.now()
         self.year, self.month = now.year, now.month
@@ -166,7 +175,7 @@ class MatrixShiftCalendar:
                                     bg=BG, fg=GREEN)
         self.title_label.pack(side="left", expand=True)
 
-        # === Часы (прижаты к низу) ===
+        # === Часы ===
         clock_frame = tk.Frame(root, bg=BG)
         clock_frame.pack(side="bottom", fill="x", pady=(4, 8))
 
@@ -190,7 +199,7 @@ class MatrixShiftCalendar:
                      ).grid(row=0, column=i, sticky="nsew", padx=1, pady=2)
             self.head_frame.grid_columnconfigure(i, weight=1, uniform="days")
 
-        # === Сетка календаря ===
+        # === Сетка ===
         self.grid_frame = tk.Frame(root, bg=GREEN_DIM)
         self.grid_frame.pack(side="top", fill="both", expand=True,
                              padx=8, pady=(0, 3))
@@ -198,7 +207,19 @@ class MatrixShiftCalendar:
         self.build_calendar()
         self.update_clock()
 
-    # ============ Полноэкранный режим ============
+    # ============ Клавиатура ============
+    def key_prev_month(self, event=None):
+        self.prev_month()
+        return "break"
+
+    def key_next_month(self, event=None):
+        self.next_month()
+        return "break"
+
+    def key_today(self, event=None):
+        self.go_today()
+        return "break"
+
     def toggle_fullscreen(self, event=None):
         self.is_fullscreen = not self.is_fullscreen
         self.root.attributes("-fullscreen", self.is_fullscreen)
@@ -311,7 +332,7 @@ class MatrixShiftCalendar:
             f"Рамка сегодня: {bw} px\n"
             f"Начало цикла: {self.start_date}\n"
             f"Длина смены: {self.shift_days} дн.\n\n"
-            f"F11 — полный экран, Esc — выход"
+            f"Клавиши: ←/→ месяц, Enter — сегодня, F11 — полный экран"
         )
 
     def open_config(self):
@@ -391,19 +412,13 @@ class MatrixShiftCalendar:
                                    is_other_month=True)
 
     def _draw_day(self, row, col, cell_date, today, bw, is_other_month):
-        """Отрисовка одной ячейки дня. is_other_month = True для дней соседних месяцев."""
         hol_name = RU_HOLIDAYS.get(cell_date)
         team = self.get_team_for_date(cell_date)
 
         is_today = (cell_date == today) and not is_other_month
         bg = BG_CELL
 
-        # === Рамка ячейки ===
-        if is_today:
-            border_color = RED
-        else:
-            border_color = GREEN_DIM
-
+        border_color = RED if is_today else GREEN_DIM
         cell_border = tk.Frame(self.grid_frame, bg=border_color)
         cell_border.grid(row=row, column=col,
                          padx=1, pady=1, sticky="nsew")
@@ -414,7 +429,6 @@ class MatrixShiftCalendar:
         else:
             cell.pack(fill="both", expand=True)
 
-        # === Верхняя строка: [пусто] [число] [праздник] ===
         head = tk.Frame(cell, bg=bg)
         head.pack(fill="x", pady=(2, 0))
         head.grid_columnconfigure(0, weight=1)
@@ -423,7 +437,6 @@ class MatrixShiftCalendar:
 
         tk.Label(head, text="", bg=bg).grid(row=0, column=0, sticky="nsew")
 
-        # Цвет числа
         if is_other_month:
             day_fg = OTHER_MONTH
         elif hol_name:
@@ -436,7 +449,6 @@ class MatrixShiftCalendar:
             bg=bg, fg=day_fg
         ).grid(row=0, column=1)
 
-        # Праздник
         if hol_name:
             short = hol_name if len(hol_name) <= 16 else hol_name[:14] + "…"
             hol_fg = dim_hex(RED, 0.55) if is_other_month else RED
@@ -445,18 +457,13 @@ class MatrixShiftCalendar:
                 bg=bg, fg=hol_fg, anchor="e"
             ).grid(row=0, column=2, sticky="e", padx=(0, 4))
 
-        # === Фамилии смены ===
         if team:
             if self.names_in_column:
                 names_text = "\n".join(team["members"])
             else:
                 names_text = ", ".join(team["members"])
 
-            # Цвет фамилий: обычный или приглушённый
-            if is_other_month:
-                names_fg = dim_hex(team["color"], 0.55)
-            else:
-                names_fg = team["color"]
+            names_fg = dim_hex(team["color"], 0.55) if is_other_month else team["color"]
 
             tk.Label(
                 cell, text=names_text, font=self.FONT_NAME,
