@@ -24,7 +24,7 @@ DEFAULT_CONFIG = {
     "_info4": "ЦВЕТА СМЕН: у каждой смены поле 'color'. Примеры: #ff9500, #00bfff, #ffcc00.",
     "_info5": "КЛАВИАТУРА: ←/→ листать месяцы, Enter — сегодня, F11 — полный экран, Esc — выход из него.",
     "_info6": "today_border_width: толщина красной рамки вокруг сегодняшнего дня (в пикселях).",
-    "_info7": "Пустые ячейки в начале и конце месяца заполняются днями соседних месяцев (приглушённым цветом).",
+    "_info7": "Программа автоматически переключается на новый месяц в 00:00, если ты не листал вручную.",
     "start_date": "2026-01-01",
     "shift_days": 3,
     "names_in_column": True,
@@ -94,7 +94,7 @@ GREEN_BRT   = "#7fff7f"
 GREEN_DIM   = "#008f11"
 GREEN_DRK   = "#003b00"
 RED         = "#ff3333"
-OTHER_MONTH = "#005500"   # для дней без смены (выходные в чужом месяце)
+OTHER_MONTH = "#005500"
 
 WEEKDAYS_RU = ["ПОНЕДЕЛЬНИК", "ВТОРНИК", "СРЕДА", "ЧЕТВЕРГ",
                "ПЯТНИЦА", "СУББОТА", "ВОСКРЕСЕНЬЕ"]
@@ -121,13 +121,19 @@ class MatrixShiftCalendar:
 
         self.is_fullscreen = False
 
+        # === Автослежение за сегодня ===
+        # True — календарь следит за реальным месяцем и переключается сам.
+        # False — пользователь ушёл в другой месяц вручную (листал ←/→).
+        self.follow_today = True
+        self.last_today = date.today()
+
         # === Горячие клавиши ===
-        self.root.bind("<Left>",   self.key_prev_month)
-        self.root.bind("<Right>",  self.key_next_month)
-        self.root.bind("<Return>", self.key_today)
+        self.root.bind("<Left>",     self.key_prev_month)
+        self.root.bind("<Right>",    self.key_next_month)
+        self.root.bind("<Return>",   self.key_today)
         self.root.bind("<KP_Enter>", self.key_today)
-        self.root.bind("<F11>",    self.toggle_fullscreen)
-        self.root.bind("<Escape>", self.exit_fullscreen)
+        self.root.bind("<F11>",      self.toggle_fullscreen)
+        self.root.bind("<Escape>",   self.exit_fullscreen)
 
         self.root.focus_set()
 
@@ -440,7 +446,6 @@ class MatrixShiftCalendar:
 
         # === ЦВЕТ ЧИСЛА ===
         if is_other_month:
-            # День соседнего месяца — цвет числа зависит от смены или праздника
             if hol_name:
                 day_fg = dim_hex(RED, dim_factor)
             elif team:
@@ -448,7 +453,6 @@ class MatrixShiftCalendar:
             else:
                 day_fg = OTHER_MONTH
         else:
-            # День текущего месяца — яркие цвета
             if hol_name:
                 day_fg = RED
             else:
@@ -485,9 +489,11 @@ class MatrixShiftCalendar:
             ).pack(padx=5, pady=(1, 2), anchor="n",
                    fill="both", expand=True)
 
-    # ============ Часы ============
+    # ============ Часы и автослежение за датой ============
     def update_clock(self):
         now = datetime.now()
+        today_now = now.date()
+
         weekday = WEEKDAYS_RU[now.weekday()]
         month = MONTHS_RU_GEN[now.month - 1]
 
@@ -495,10 +501,27 @@ class MatrixShiftCalendar:
         self.date_label.config(
             text=f"{weekday}, {now.day} {month} {now.year}"
         )
+
+        # === Автослежение ===
+        # 1) Если наступил новый день — надо перекрасить рамку "сегодня"
+        day_changed = (today_now != self.last_today)
+
+        # 2) Если follow_today=True и месяц на экране не совпадает с реальным —
+        #    переключиться на реальный (например, при переходе на 1-е число)
+        month_changed = (self.year, self.month) != (today_now.year, today_now.month)
+
+        if day_changed or (self.follow_today and month_changed):
+            if self.follow_today:
+                # Следуем за сегодня — переходим на реальный месяц
+                self.year, self.month = today_now.year, today_now.month
+            self.last_today = today_now
+            self.build_calendar()
+
         self.root.after(1000, self.update_clock)
 
     # ============ Навигация ============
     def prev_month(self):
+        self.follow_today = False   # пользователь ушёл с текущего месяца
         self.month -= 1
         if self.month < 1:
             self.month = 12
@@ -506,6 +529,7 @@ class MatrixShiftCalendar:
         self.build_calendar()
 
     def next_month(self):
+        self.follow_today = False
         self.month += 1
         if self.month > 12:
             self.month = 1
@@ -515,6 +539,8 @@ class MatrixShiftCalendar:
     def go_today(self):
         now = datetime.now()
         self.year, self.month = now.year, now.month
+        self.follow_today = True    # снова следим за датой
+        self.last_today = now.date()
         self.build_calendar()
 
 
