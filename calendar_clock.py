@@ -5,7 +5,7 @@ import json
 import os
 import sys
 import subprocess
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import holidays
 
 
@@ -24,6 +24,7 @@ DEFAULT_CONFIG = {
     "_info4": "ЦВЕТА СМЕН: у каждой смены поле 'color'. Примеры: #ff9500, #00bfff, #ffcc00.",
     "_info5": "F11 — полный экран (без рамки Windows), Esc — выйти из полного экрана.",
     "_info6": "today_border_width: толщина красной рамки вокруг сегодняшнего дня (в пикселях).",
+    "_info7": "Пустые ячейки в начале и конце месяца заполняются днями соседних месяцев (приглушённым цветом).",
     "start_date": "2026-01-01",
     "shift_days": 3,
     "names_in_column": True,
@@ -73,13 +74,14 @@ def load_config():
 
 
 # === Матричная палитра ===
-BG         = "#000000"
-BG_CELL    = "#050505"
-GREEN      = "#00ff41"
-GREEN_BRT  = "#7fff7f"
-GREEN_DIM  = "#008f11"
-GREEN_DRK  = "#003b00"
-RED        = "#ff3333"
+BG          = "#000000"
+BG_CELL     = "#050505"
+GREEN       = "#00ff41"
+GREEN_BRT   = "#7fff7f"
+GREEN_DIM   = "#008f11"
+GREEN_DRK   = "#003b00"
+RED         = "#ff3333"
+OTHER_MONTH = "#005500"   # цвет дней соседних месяцев
 
 WEEKDAYS_RU = ["ПОНЕДЕЛЬНИК", "ВТОРНИК", "СРЕДА", "ЧЕТВЕРГ",
                "ПЯТНИЦА", "СУББОТА", "ВОСКРЕСЕНЬЕ"]
@@ -301,7 +303,6 @@ class MatrixShiftCalendar:
         )
 
     def open_config(self):
-        """Открывает shifts.json в Блокноте."""
         try:
             if not os.path.exists(CONFIG_FILE):
                 try:
@@ -343,84 +344,122 @@ class MatrixShiftCalendar:
         )
 
         today = date.today()
-        cal = calendar.Calendar(firstweekday=0)
-        weeks = cal.monthdayscalendar(self.year, self.month)
-        while len(weeks) < 6:
-            weeks.append([0] * 7)
+
+        # Первый день месяца и количество дней в месяце
+        first_day = date(self.year, self.month, 1)
+        if self.month == 12:
+            first_day_next = date(self.year + 1, 1, 1)
+        else:
+            first_day_next = date(self.year, self.month + 1, 1)
+        days_in_month = (first_day_next - first_day).days
+
+        # С какого столбца начинается месяц (0 = ПН)
+        first_weekday = first_day.weekday()
 
         bw = int(self.ui.get("today_border_width", 3))
 
-        for row, week in enumerate(weeks):
+        # 6 строк × 7 столбцов = 42 ячейки (всегда)
+        for row in range(6):
             self.grid_frame.grid_rowconfigure(
                 row, weight=1, minsize=self.ui["cell_min_height"])
-            for col, day in enumerate(week):
-                self.grid_frame.grid_columnconfigure(col, weight=1, uniform="days")
+            for col in range(7):
+                self.grid_frame.grid_columnconfigure(
+                    col, weight=1, uniform="days")
 
-                # Пустая ячейка
-                if day == 0:
-                    cell_border = tk.Frame(self.grid_frame, bg=GREEN_DIM)
-                    cell_border.grid(row=row, column=col,
-                                     padx=1, pady=1, sticky="nsew")
-                    tk.Label(cell_border, text="", bg=BG_CELL).pack(
-                        fill="both", expand=True)
-                    continue
+                idx = row * 7 + col   # индекс ячейки: 0..41
 
-                d_obj = date(self.year, self.month, day)
-                hol_name = RU_HOLIDAYS.get(d_obj)
-                team = self.get_team_for_date(d_obj)
-
-                is_today = (d_obj == today)
-                team_color = team["color"] if team else GREEN_DIM
-                bg = BG_CELL
-
-                # === Рамка ячейки ===
-                border_color = RED if is_today else GREEN_DIM
-                cell_border = tk.Frame(self.grid_frame, bg=border_color)
-                cell_border.grid(row=row, column=col,
-                                 padx=1, pady=1, sticky="nsew")
-
-                cell = tk.Frame(cell_border, bg=bg)
-                if is_today:
-                    cell.pack(fill="both", expand=True, padx=bw, pady=bw)
+                if idx < first_weekday:
+                    # Дни предыдущего месяца — приглушённо
+                    cell_date = first_day - timedelta(days=first_weekday - idx)
+                    self._draw_other_day(row, col, cell_date)
+                elif idx < first_weekday + days_in_month:
+                    # Дни текущего месяца — обычные
+                    cell_date = date(
+                        self.year, self.month, idx - first_weekday + 1)
+                    self._draw_current_day(row, col, cell_date, today, bw)
                 else:
-                    cell.pack(fill="both", expand=True)
+                    # Дни следующего месяца — приглушённо
+                    cell_date = first_day + timedelta(days=idx - first_weekday)
+                    self._draw_other_day(row, col, cell_date)
 
-                # === ВЕРХНЯЯ СТРОКА ===
-                head = tk.Frame(cell, bg=bg)
-                head.pack(fill="x", pady=(2, 0))
-                head.grid_columnconfigure(0, weight=1)
-                head.grid_columnconfigure(1, weight=0)
-                head.grid_columnconfigure(2, weight=1)
+    def _draw_other_day(self, row, col, cell_date):
+        """Ячейка дня из соседнего месяца — только число, тускло."""
+        cell_border = tk.Frame(self.grid_frame, bg=GREEN_DIM)
+        cell_border.grid(row=row, column=col,
+                         padx=1, pady=1, sticky="nsew")
 
-                tk.Label(head, text="", bg=bg).grid(
-                    row=0, column=0, sticky="nsew")
+        cell = tk.Frame(cell_border, bg=BG_CELL)
+        cell.pack(fill="both", expand=True)
 
-                day_fg = RED if hol_name else team_color
-                tk.Label(
-                    head, text=str(day), font=self.FONT_DAY,
-                    bg=bg, fg=day_fg
-                ).grid(row=0, column=1)
+        head = tk.Frame(cell, bg=BG_CELL)
+        head.pack(fill="x", pady=(2, 0))
+        head.grid_columnconfigure(0, weight=1)
+        head.grid_columnconfigure(1, weight=0)
+        head.grid_columnconfigure(2, weight=1)
 
-                if hol_name:
-                    short = hol_name if len(hol_name) <= 16 else hol_name[:14] + "…"
-                    tk.Label(
-                        head, text=short, font=self.FONT_HOL,
-                        bg=bg, fg=RED, anchor="e"
-                    ).grid(row=0, column=2, sticky="e", padx=(0, 4))
+        tk.Label(head, text="", bg=BG_CELL).grid(
+            row=0, column=0, sticky="nsew")
+        tk.Label(head, text=str(cell_date.day), font=self.FONT_DAY,
+                 bg=BG_CELL, fg=OTHER_MONTH).grid(row=0, column=1)
+        tk.Label(head, text="", bg=BG_CELL).grid(
+            row=0, column=2, sticky="nsew")
 
-                # === Фамилии ===
-                if team:
-                    if self.names_in_column:
-                        names_text = "\n".join(team["members"])
-                    else:
-                        names_text = ", ".join(team["members"])
+    def _draw_current_day(self, row, col, cell_date, today, bw):
+        """Ячейка дня текущего месяца — с числом, сменой, праздником."""
+        hol_name = RU_HOLIDAYS.get(cell_date)
+        team = self.get_team_for_date(cell_date)
 
-                    tk.Label(
-                        cell, text=names_text, font=self.FONT_NAME,
-                        bg=bg, fg=team_color,
-                        wraplength=250, justify="center", anchor="n"
-                    ).pack(padx=5, pady=(1, 2), anchor="n",
-                           fill="both", expand=True)
+        is_today = (cell_date == today)
+        team_color = team["color"] if team else GREEN_DIM
+        bg = BG_CELL
+
+        # Рамка: красная для сегодня, зелёная для остальных
+        border_color = RED if is_today else GREEN_DIM
+        cell_border = tk.Frame(self.grid_frame, bg=border_color)
+        cell_border.grid(row=row, column=col,
+                         padx=1, pady=1, sticky="nsew")
+
+        cell = tk.Frame(cell_border, bg=bg)
+        if is_today:
+            cell.pack(fill="both", expand=True, padx=bw, pady=bw)
+        else:
+            cell.pack(fill="both", expand=True)
+
+        # === Верхняя строка: [пусто] [число] [праздник] ===
+        head = tk.Frame(cell, bg=bg)
+        head.pack(fill="x", pady=(2, 0))
+        head.grid_columnconfigure(0, weight=1)
+        head.grid_columnconfigure(1, weight=0)
+        head.grid_columnconfigure(2, weight=1)
+
+        tk.Label(head, text="", bg=bg).grid(row=0, column=0, sticky="nsew")
+
+        day_fg = RED if hol_name else team_color
+        tk.Label(
+            head, text=str(cell_date.day), font=self.FONT_DAY,
+            bg=bg, fg=day_fg
+        ).grid(row=0, column=1)
+
+        if hol_name:
+            short = hol_name if len(hol_name) <= 16 else hol_name[:14] + "…"
+            tk.Label(
+                head, text=short, font=self.FONT_HOL,
+                bg=bg, fg=RED, anchor="e"
+            ).grid(row=0, column=2, sticky="e", padx=(0, 4))
+
+        # === Фамилии смены ===
+        if team:
+            if self.names_in_column:
+                names_text = "\n".join(team["members"])
+            else:
+                names_text = ", ".join(team["members"])
+
+            tk.Label(
+                cell, text=names_text, font=self.FONT_NAME,
+                bg=bg, fg=team_color,
+                wraplength=250, justify="center", anchor="n"
+            ).pack(padx=5, pady=(1, 2), anchor="n",
+                   fill="both", expand=True)
 
     # ============ Часы ============
     def update_clock(self):
