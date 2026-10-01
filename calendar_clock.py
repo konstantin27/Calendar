@@ -24,7 +24,7 @@ DEFAULT_CONFIG = {
     "_info4": "ЦВЕТА СМЕН: у каждой смены поле 'color'. Примеры: #ff9500, #00bfff, #ffcc00.",
     "_info5": "КЛАВИАТУРА: ←/→ листать месяцы, Enter — сегодня, F11 — полный экран, Esc — выход из него.",
     "_info6": "today_border_width: толщина красной рамки вокруг сегодняшнего дня (в пикселях).",
-    "_info7": "Программа автоматически переключается на новый месяц в 00:00, если ты не листал вручную.",
+    "_info7": "fullscreen_on_start: true — окно открывается сразу в полноэкранном режиме без рамки Windows.",
     "start_date": "2026-01-01",
     "shift_days": 3,
     "names_in_column": True,
@@ -54,7 +54,8 @@ DEFAULT_CONFIG = {
         "font_title": 16,
         "font_head": 10,
         "today_border_width": 3,
-        "other_month_dim": 0.55
+        "other_month_dim": 0.55,
+        "fullscreen_on_start": False
     }
 }
 
@@ -122,8 +123,6 @@ class MatrixShiftCalendar:
         self.is_fullscreen = False
 
         # === Автослежение за сегодня ===
-        # True — календарь следит за реальным месяцем и переключается сам.
-        # False — пользователь ушёл в другой месяц вручную (листал ←/→).
         self.follow_today = True
         self.last_today = date.today()
 
@@ -212,6 +211,16 @@ class MatrixShiftCalendar:
 
         self.build_calendar()
         self.update_clock()
+
+        # === АВТО-ПОЛНЫЙ ЭКРАН при запуске ===
+        if self.ui.get("fullscreen_on_start", False):
+            # отложенный запуск — чтобы окно успело отрисоваться
+            self.root.after(100, self._initial_fullscreen)
+
+    def _initial_fullscreen(self):
+        self.is_fullscreen = True
+        self.root.attributes("-fullscreen", True)
+        self.root.focus_set()
 
     # ============ Клавиатура ============
     def key_prev_month(self, event=None):
@@ -320,6 +329,12 @@ class MatrixShiftCalendar:
         )
         self.root.minsize(self.ui["min_width"], self.ui["min_height"])
 
+        # Применяем fullscreen_on_start (если поменяли)
+        want_fs = bool(self.ui.get("fullscreen_on_start", False))
+        if want_fs != self.is_fullscreen:
+            self.is_fullscreen = want_fs
+            self.root.attributes("-fullscreen", want_fs)
+
         self.build_calendar()
         self.root.update_idletasks()
 
@@ -329,6 +344,7 @@ class MatrixShiftCalendar:
         )
         mode = "столбиком" if self.names_in_column else "в строку"
         bw = self.ui.get("today_border_width", 3)
+        fs = "ДА" if self.ui.get("fullscreen_on_start", False) else "НЕТ"
 
         messagebox.showinfo(
             "НАСТРОЙКИ ОБНОВЛЕНЫ",
@@ -336,9 +352,9 @@ class MatrixShiftCalendar:
             f"Смен: {len(self.teams)}\n{teams_info}\n\n"
             f"Фамилии: {mode}\n"
             f"Рамка сегодня: {bw} px\n"
+            f"Авто-полный экран: {fs}\n"
             f"Начало цикла: {self.start_date}\n"
-            f"Длина смены: {self.shift_days} дн.\n\n"
-            f"Клавиши: ←/→ месяц, Enter — сегодня, F11 — полный экран"
+            f"Длина смены: {self.shift_days} дн."
         )
 
     def open_config(self):
@@ -436,15 +452,16 @@ class MatrixShiftCalendar:
         else:
             cell.pack(fill="both", expand=True)
 
+        # === ВЕРХНЯЯ СТРОКА: [пусто] [число] [праздник] ===
+        # УМЕНЬШИЛ отступ снизу с pady=(2, 0) до pady=(0, 0)
         head = tk.Frame(cell, bg=bg)
-        head.pack(fill="x", pady=(2, 0))
+        head.pack(fill="x", pady=(1, 0))
         head.grid_columnconfigure(0, weight=1)
         head.grid_columnconfigure(1, weight=0)
         head.grid_columnconfigure(2, weight=1)
 
         tk.Label(head, text="", bg=bg).grid(row=0, column=0, sticky="nsew")
 
-        # === ЦВЕТ ЧИСЛА ===
         if is_other_month:
             if hol_name:
                 day_fg = dim_hex(RED, dim_factor)
@@ -463,7 +480,6 @@ class MatrixShiftCalendar:
             bg=bg, fg=day_fg
         ).grid(row=0, column=1)
 
-        # === ПРАЗДНИК ===
         if hol_name:
             short = hol_name if len(hol_name) <= 16 else hol_name[:14] + "…"
             hol_fg = dim_hex(RED, dim_factor) if is_other_month else RED
@@ -473,6 +489,7 @@ class MatrixShiftCalendar:
             ).grid(row=0, column=2, sticky="e", padx=(0, 4))
 
         # === ФАМИЛИИ ===
+        # УМЕНЬШИЛ верхний отступ с pady=(1, 2) до pady=(0, 1)
         if team:
             if self.names_in_column:
                 names_text = "\n".join(team["members"])
@@ -486,7 +503,7 @@ class MatrixShiftCalendar:
                 cell, text=names_text, font=self.FONT_NAME,
                 bg=bg, fg=names_fg,
                 wraplength=250, justify="center", anchor="n"
-            ).pack(padx=5, pady=(1, 2), anchor="n",
+            ).pack(padx=5, pady=(0, 1), anchor="n",
                    fill="both", expand=True)
 
     # ============ Часы и автослежение за датой ============
@@ -502,17 +519,11 @@ class MatrixShiftCalendar:
             text=f"{weekday}, {now.day} {month} {now.year}"
         )
 
-        # === Автослежение ===
-        # 1) Если наступил новый день — надо перекрасить рамку "сегодня"
         day_changed = (today_now != self.last_today)
-
-        # 2) Если follow_today=True и месяц на экране не совпадает с реальным —
-        #    переключиться на реальный (например, при переходе на 1-е число)
         month_changed = (self.year, self.month) != (today_now.year, today_now.month)
 
         if day_changed or (self.follow_today and month_changed):
             if self.follow_today:
-                # Следуем за сегодня — переходим на реальный месяц
                 self.year, self.month = today_now.year, today_now.month
             self.last_today = today_now
             self.build_calendar()
@@ -521,7 +532,7 @@ class MatrixShiftCalendar:
 
     # ============ Навигация ============
     def prev_month(self):
-        self.follow_today = False   # пользователь ушёл с текущего месяца
+        self.follow_today = False
         self.month -= 1
         if self.month < 1:
             self.month = 12
@@ -539,7 +550,7 @@ class MatrixShiftCalendar:
     def go_today(self):
         now = datetime.now()
         self.year, self.month = now.year, now.month
-        self.follow_today = True    # снова следим за датой
+        self.follow_today = True
         self.last_today = now.date()
         self.build_calendar()
 
