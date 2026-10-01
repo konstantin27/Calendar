@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import messagebox
+import tkinter.font as tkfont
 import calendar
 import json
 import os
@@ -48,7 +49,7 @@ DEFAULT_CONFIG = {
         "cell_min_height": 70,
         "font_day": 16,
         "font_holiday": 9,
-        "font_names": 8,
+        "font_names": 9,
         "font_clock": 26,
         "font_date": 11,
         "font_title": 16,
@@ -264,7 +265,18 @@ class MatrixShiftCalendar:
         u = self.ui
         self.FONT_DAY   = ("Consolas", int(u["font_day"]), "bold")
         self.FONT_HOL   = ("Consolas", int(u["font_holiday"]), "bold")
-        self.FONT_NAME  = ("Consolas", int(u["font_names"]))
+
+        # ★ Плотный межстрочный интервал для фамилий
+        #   linespace = -2 убирает "воздух" между строками
+        size = int(u["font_names"])
+        self.FONT_NAME = tkfont.Font(
+            family="Consolas", size=size, weight="normal"
+        )
+        try:
+            self.FONT_NAME.configure(linespace=max(0, size - 2))
+        except Exception:
+            pass
+
         self.FONT_TITLE = ("Consolas", int(u["font_title"]), "bold")
         self.FONT_HEAD  = ("Consolas", int(u["font_head"]), "bold")
         self.FONT_CLOCK = ("Consolas", int(u["font_clock"]), "bold")
@@ -432,7 +444,6 @@ class MatrixShiftCalendar:
         bg = BG_CELL
         dim_factor = float(self.ui.get("other_month_dim", 0.55))
 
-        # === Рамка сетки — тонкая зелёная ===
         cell_border = tk.Frame(self.grid_frame, bg=GREEN_DIM)
         cell_border.grid(row=row, column=col,
                          padx=1, pady=1, sticky="nsew")
@@ -440,14 +451,14 @@ class MatrixShiftCalendar:
         cell = tk.Frame(cell_border, bg=bg)
         cell.pack(fill="both", expand=True)
 
-        # === Контент с небольшим отступом от краёв ===
+        # ★ Убран вертикальный внутренний отступ (pady=0)
         inner = tk.Frame(cell, bg=bg)
-        inner.pack(fill="both", expand=True, padx=4, pady=2)
+        inner.pack(fill="both", expand=True, padx=3, pady=0)
 
-        # === ВЕРХНЯЯ СТРОКА: [пусто] [число] [праздник] ===
-        # ★ УБРАН отступ снизу у head — число и фамилии теперь вплотную
+        # === ВЕРХНЯЯ СТРОКА ===
+        # ★ Отступы обнулены полностью
         head = tk.Frame(inner, bg=bg)
-        head.pack(fill="x", pady=(0, 0))
+        head.pack(fill="x", pady=0)
         head.grid_columnconfigure(0, weight=1)
         head.grid_columnconfigure(1, weight=0)
         head.grid_columnconfigure(2, weight=1)
@@ -480,8 +491,8 @@ class MatrixShiftCalendar:
                 bg=bg, fg=hol_fg, anchor="e"
             ).grid(row=0, column=2, sticky="e", padx=(0, 4))
 
-        # === ФАМИЛИИ — вплотную к числу ===
-        # ★ pady=(0, 1) — 0 сверху, 1 снизу (чтобы не прилипало к нижнему краю)
+        # === ФАМИЛИИ ===
+        # ★ pady=(0, 0) — фамилии прижаты к числу и к нижнему краю
         if team:
             if self.names_in_column:
                 names_text = "\n".join(team["members"])
@@ -495,14 +506,12 @@ class MatrixShiftCalendar:
                 inner, text=names_text, font=self.FONT_NAME,
                 bg=bg, fg=names_fg,
                 wraplength=250, justify="center", anchor="n"
-            ).pack(pady=(0, 1), anchor="n", fill="both", expand=True)
+            ).pack(pady=0, anchor="n", fill="both", expand=True)
 
-        # === КРАСНАЯ РАМКА ПОВЕРХ ЯЧЕЙКИ ===
         if is_today:
             self._draw_today_frame(cell, bw)
 
     def _draw_today_frame(self, parent, bw):
-        """Рисует 4 красные полоски по краям parent, поверх содержимого."""
         tk.Frame(parent, bg=RED, height=bw).place(x=0, y=0, relwidth=1)
         tk.Frame(parent, bg=RED, height=bw).place(
             x=0, rely=1.0, y=-bw, relwidth=1)
@@ -511,7 +520,7 @@ class MatrixShiftCalendar:
         tk.Frame(parent, bg=RED, width=bw).place(
             relx=1.0, x=-bw, y=0, relheight=1)
 
-    # ============ Часы и автослежение за датой ============
+    # ============ Часы ============
     def update_clock(self):
         now = datetime.now()
         today_now = now.date()
