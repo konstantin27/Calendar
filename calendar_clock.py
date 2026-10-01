@@ -23,7 +23,7 @@ DEFAULT_CONFIG = {
     "_info3": "names_in_column: true — фамилии столбиком, false — в строку через запятую.",
     "_info4": "ЦВЕТА СМЕН: у каждой смены поле 'color'. Примеры: #ff9500, #00bfff, #ffcc00.",
     "_info5": "КЛАВИАТУРА: ←/→ листать месяцы, Enter — сегодня, F11 — полный экран, Esc — выход из него.",
-    "_info6": "today_border_width: толщина красной рамки вокруг сегодняшнего дня (в пикселях).",
+    "_info6": "today_border_width: толщина красной рамки (не влияет на размер содержимого ячейки).",
     "_info7": "fullscreen_on_start: true — окно открывается сразу в полноэкранном режиме без рамки Windows.",
     "start_date": "2026-01-01",
     "shift_days": 3,
@@ -76,7 +76,6 @@ def load_config():
 
 
 def dim_hex(hex_color, factor=0.55):
-    """Затемняет HEX-цвет на заданный коэффициент (0..1)."""
     hex_color = hex_color.lstrip("#")
     r = int(hex_color[0:2], 16)
     g = int(hex_color[2:4], 16)
@@ -122,11 +121,9 @@ class MatrixShiftCalendar:
 
         self.is_fullscreen = False
 
-        # === Автослежение за сегодня ===
         self.follow_today = True
         self.last_today = date.today()
 
-        # === Горячие клавиши ===
         self.root.bind("<Left>",     self.key_prev_month)
         self.root.bind("<Right>",    self.key_next_month)
         self.root.bind("<Return>",   self.key_today)
@@ -180,7 +177,6 @@ class MatrixShiftCalendar:
                                     bg=BG, fg=GREEN)
         self.title_label.pack(side="left", expand=True)
 
-        # === Часы ===
         clock_frame = tk.Frame(root, bg=BG)
         clock_frame.pack(side="bottom", fill="x", pady=(4, 8))
 
@@ -192,7 +188,6 @@ class MatrixShiftCalendar:
                                    bg=BG, fg=GREEN_DIM)
         self.date_label.pack()
 
-        # === Шапка дней недели ===
         self.head_frame = tk.Frame(root, bg=GREEN_DRK)
         self.head_frame.pack(side="top", fill="x", padx=8, pady=(3, 0))
 
@@ -204,7 +199,6 @@ class MatrixShiftCalendar:
                      ).grid(row=0, column=i, sticky="nsew", padx=1, pady=2)
             self.head_frame.grid_columnconfigure(i, weight=1, uniform="days")
 
-        # === Сетка ===
         self.grid_frame = tk.Frame(root, bg=GREEN_DIM)
         self.grid_frame.pack(side="top", fill="both", expand=True,
                              padx=8, pady=(0, 3))
@@ -212,9 +206,7 @@ class MatrixShiftCalendar:
         self.build_calendar()
         self.update_clock()
 
-        # === АВТО-ПОЛНЫЙ ЭКРАН при запуске ===
         if self.ui.get("fullscreen_on_start", False):
-            # отложенный запуск — чтобы окно успело отрисоваться
             self.root.after(100, self._initial_fullscreen)
 
     def _initial_fullscreen(self):
@@ -329,7 +321,6 @@ class MatrixShiftCalendar:
         )
         self.root.minsize(self.ui["min_width"], self.ui["min_height"])
 
-        # Применяем fullscreen_on_start (если поменяли)
         want_fs = bool(self.ui.get("fullscreen_on_start", False))
         if want_fs != self.is_fullscreen:
             self.is_fullscreen = want_fs
@@ -441,21 +432,22 @@ class MatrixShiftCalendar:
         bg = BG_CELL
         dim_factor = float(self.ui.get("other_month_dim", 0.55))
 
-        border_color = RED if is_today else GREEN_DIM
-        cell_border = tk.Frame(self.grid_frame, bg=border_color)
+        # === Рамка сетки — тонкая зелёная ===
+        cell_border = tk.Frame(self.grid_frame, bg=GREEN_DIM)
         cell_border.grid(row=row, column=col,
                          padx=1, pady=1, sticky="nsew")
 
         cell = tk.Frame(cell_border, bg=bg)
-        if is_today:
-            cell.pack(fill="both", expand=True, padx=bw, pady=bw)
-        else:
-            cell.pack(fill="both", expand=True)
+        cell.pack(fill="both", expand=True)
+
+        # === Контент с небольшим отступом от краёв ===
+        inner = tk.Frame(cell, bg=bg)
+        inner.pack(fill="both", expand=True, padx=4, pady=2)
 
         # === ВЕРХНЯЯ СТРОКА: [пусто] [число] [праздник] ===
-        # УМЕНЬШИЛ отступ снизу с pady=(2, 0) до pady=(0, 0)
-        head = tk.Frame(cell, bg=bg)
-        head.pack(fill="x", pady=(1, 0))
+        # ★ УБРАН отступ снизу у head — число и фамилии теперь вплотную
+        head = tk.Frame(inner, bg=bg)
+        head.pack(fill="x", pady=(0, 0))
         head.grid_columnconfigure(0, weight=1)
         head.grid_columnconfigure(1, weight=0)
         head.grid_columnconfigure(2, weight=1)
@@ -488,8 +480,8 @@ class MatrixShiftCalendar:
                 bg=bg, fg=hol_fg, anchor="e"
             ).grid(row=0, column=2, sticky="e", padx=(0, 4))
 
-        # === ФАМИЛИИ ===
-        # УМЕНЬШИЛ верхний отступ с pady=(1, 2) до pady=(0, 1)
+        # === ФАМИЛИИ — вплотную к числу ===
+        # ★ pady=(0, 1) — 0 сверху, 1 снизу (чтобы не прилипало к нижнему краю)
         if team:
             if self.names_in_column:
                 names_text = "\n".join(team["members"])
@@ -500,11 +492,24 @@ class MatrixShiftCalendar:
                         if is_other_month else team["color"])
 
             tk.Label(
-                cell, text=names_text, font=self.FONT_NAME,
+                inner, text=names_text, font=self.FONT_NAME,
                 bg=bg, fg=names_fg,
                 wraplength=250, justify="center", anchor="n"
-            ).pack(padx=5, pady=(0, 1), anchor="n",
-                   fill="both", expand=True)
+            ).pack(pady=(0, 1), anchor="n", fill="both", expand=True)
+
+        # === КРАСНАЯ РАМКА ПОВЕРХ ЯЧЕЙКИ ===
+        if is_today:
+            self._draw_today_frame(cell, bw)
+
+    def _draw_today_frame(self, parent, bw):
+        """Рисует 4 красные полоски по краям parent, поверх содержимого."""
+        tk.Frame(parent, bg=RED, height=bw).place(x=0, y=0, relwidth=1)
+        tk.Frame(parent, bg=RED, height=bw).place(
+            x=0, rely=1.0, y=-bw, relwidth=1)
+        tk.Frame(parent, bg=RED, width=bw).place(
+            x=0, y=0, relheight=1)
+        tk.Frame(parent, bg=RED, width=bw).place(
+            relx=1.0, x=-bw, y=0, relheight=1)
 
     # ============ Часы и автослежение за датой ============
     def update_clock(self):
