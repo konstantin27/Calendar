@@ -131,12 +131,17 @@ class MatrixShiftCalendar:
         self.follow_today = True
         self.last_today = date.today()
 
+        # ★ Дебаунс для перестроения при изменении размера окна
+        self._resize_job = None
+
         self.root.bind("<Left>",     self.key_prev_month)
         self.root.bind("<Right>",    self.key_next_month)
         self.root.bind("<Return>",   self.key_today)
         self.root.bind("<KP_Enter>", self.key_today)
         self.root.bind("<F11>",      self.toggle_fullscreen)
         self.root.bind("<Escape>",   self.exit_fullscreen)
+        # ★ Реакция на изменение размера окна
+        self.root.bind("<Configure>", self._on_window_resize)
 
         self.root.focus_set()
 
@@ -220,6 +225,29 @@ class MatrixShiftCalendar:
         self.is_fullscreen = True
         self.root.attributes("-fullscreen", True)
         self.root.focus_set()
+        # Перестроить после смены размера
+        self.root.after(150, self.build_calendar)
+
+    # ============ Реакция на изменение размера окна ============
+    def _on_window_resize(self, event=None):
+        """Вызывается при любом изменении размера окна (в т.ч. F11)."""
+        # Только когда меняется именно корневое окно
+        if event is not None and event.widget is not self.root:
+            return
+        # Дебаунс — перестроить один раз через 100 мс
+        if self._resize_job is not None:
+            try:
+                self.root.after_cancel(self._resize_job)
+            except Exception:
+                pass
+        self._resize_job = self.root.after(100, self._rebuild_after_resize)
+
+    def _rebuild_after_resize(self):
+        self._resize_job = None
+        try:
+            self.build_calendar()
+        except Exception:
+            pass
 
     # ============ Клавиатура ============
     def key_prev_month(self, event=None):
@@ -238,12 +266,15 @@ class MatrixShiftCalendar:
         self.is_fullscreen = not self.is_fullscreen
         self.root.attributes("-fullscreen", self.is_fullscreen)
         self.root.focus_set()
+        # ★ Перестроить календарь после смены режима
+        self.root.after(150, self.build_calendar)
         return "break"
 
     def exit_fullscreen(self, event=None):
         if self.is_fullscreen:
             self.is_fullscreen = False
             self.root.attributes("-fullscreen", False)
+            self.root.after(150, self.build_calendar)
         return "break"
 
     # ============ Настройки ============
@@ -287,7 +318,6 @@ class MatrixShiftCalendar:
 
         size = int(u["font_names"])
 
-        # ★ Обычный шрифт фамилий
         self.FONT_NAME = tkfont.Font(
             family="Consolas", size=size, weight="normal"
         )
@@ -296,7 +326,6 @@ class MatrixShiftCalendar:
         except Exception:
             pass
 
-        # ★ Шрифт для отпускников — с зачёркиванием (overstrike)
         self.FONT_NAME_STRIKE = tkfont.Font(
             family="Consolas", size=size, weight="normal", overstrike=1
         )
@@ -543,13 +572,12 @@ class MatrixShiftCalendar:
                              if is_other_month else vac_color)
 
             if self.names_in_column:
-                # Каждая фамилия — отдельный Label
                 for member in team["members"]:
                     on_vac = self.is_on_vacation(member, cell_date)
                     if on_vac:
                         tk.Label(
                             inner, text=member,
-                            font=self.FONT_NAME_STRIKE,   # ← зачёркнутый
+                            font=self.FONT_NAME_STRIKE,
                             bg=bg, fg=vac_color_use,
                             anchor="n"
                         ).pack(anchor="n", fill="x")
@@ -561,7 +589,6 @@ class MatrixShiftCalendar:
                             anchor="n"
                         ).pack(anchor="n", fill="x")
             else:
-                # В строку — если хоть кто-то в отпуске, красим всю строку серым
                 any_vac = any(
                     self.is_on_vacation(m, cell_date) for m in team["members"]
                 )
