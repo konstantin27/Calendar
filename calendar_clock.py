@@ -26,6 +26,7 @@ DEFAULT_CONFIG = {
     "_info5": "КЛАВИАТУРА: ←/→ листать месяцы, Enter — сегодня, F11 — полный экран, Esc — выход из него.",
     "_info6": "today_border_width: толщина красной рамки (не влияет на размер содержимого ячейки).",
     "_info7": "fullscreen_on_start: true — окно открывается сразу в полноэкранном режиме без рамки Windows.",
+    "_info8": "ОТПУСКА: блок 'vacations' — фамилия → список периодов ['ГГГГ-ММ-ДД', 'ГГГГ-ММ-ДД']. Фамилия в отпуске перечёркивается и становится серой.",
     "start_date": "2026-01-01",
     "shift_days": 3,
     "names_in_column": True,
@@ -41,6 +42,10 @@ DEFAULT_CONFIG = {
             "members": ["Кузнецов К.", "Смирнов С.", "Волков В.", "Соколов С."]
         }
     ],
+    "vacations": {
+        "Иванов И.": [["2026-06-01", "2026-06-14"]],
+        "Кузнецов К.": [["2026-07-15", "2026-07-28"]]
+    },
     "ui": {
         "window_width": 1100,
         "window_height": 900,
@@ -56,7 +61,8 @@ DEFAULT_CONFIG = {
         "font_head": 10,
         "today_border_width": 3,
         "other_month_dim": 0.55,
-        "fullscreen_on_start": False
+        "fullscreen_on_start": False,
+        "vacation_color": "#555555"
     }
 }
 
@@ -96,6 +102,7 @@ GREEN_DIM   = "#008f11"
 GREEN_DRK   = "#003b00"
 RED         = "#ff3333"
 OTHER_MONTH = "#005500"
+VACATION    = "#555555"
 
 WEEKDAYS_RU = ["ПОНЕДЕЛЬНИК", "ВТОРНИК", "СРЕДА", "ЧЕТВЕРГ",
                "ПЯТНИЦА", "СУББОТА", "ВОСКРЕСЕНЬЕ"]
@@ -121,7 +128,6 @@ class MatrixShiftCalendar:
         self.root.resizable(True, True)
 
         self.is_fullscreen = False
-
         self.follow_today = True
         self.last_today = date.today()
 
@@ -258,6 +264,19 @@ class MatrixShiftCalendar:
 
         self.names_in_column = bool(self.config.get("names_in_column", True))
 
+        self.vacations = {}
+        raw_vac = self.config.get("vacations", {}) or {}
+        for name, periods in raw_vac.items():
+            parsed = []
+            for p in periods:
+                try:
+                    s = datetime.strptime(p[0], "%Y-%m-%d").date()
+                    e = datetime.strptime(p[1], "%Y-%m-%d").date()
+                    parsed.append((s, e))
+                except Exception:
+                    pass
+            self.vacations[name] = parsed
+
         ui = self.config.get("ui", {}) or {}
         self.ui = {**DEFAULT_UI, **ui}
 
@@ -266,14 +285,23 @@ class MatrixShiftCalendar:
         self.FONT_DAY   = ("Consolas", int(u["font_day"]), "bold")
         self.FONT_HOL   = ("Consolas", int(u["font_holiday"]), "bold")
 
-        # ★ Плотный межстрочный интервал для фамилий
-        #   linespace = -2 убирает "воздух" между строками
         size = int(u["font_names"])
+
+        # ★ Обычный шрифт фамилий
         self.FONT_NAME = tkfont.Font(
             family="Consolas", size=size, weight="normal"
         )
         try:
             self.FONT_NAME.configure(linespace=max(0, size - 2))
+        except Exception:
+            pass
+
+        # ★ Шрифт для отпускников — с зачёркиванием (overstrike)
+        self.FONT_NAME_STRIKE = tkfont.Font(
+            family="Consolas", size=size, weight="normal", overstrike=1
+        )
+        try:
+            self.FONT_NAME_STRIKE.configure(linespace=max(0, size - 2))
         except Exception:
             pass
 
@@ -289,6 +317,13 @@ class MatrixShiftCalendar:
         delta = (target_date - self.start_date).days
         pos = delta % cycle
         return self.teams[pos // self.shift_days]
+
+    def is_on_vacation(self, name, target_date):
+        periods = self.vacations.get(name, [])
+        for start, end in periods:
+            if start <= target_date <= end:
+                return True
+        return False
 
     def reload_config(self):
         try:
@@ -318,6 +353,19 @@ class MatrixShiftCalendar:
         self.teams = self.config.get("teams", []) or DEFAULT_CONFIG["teams"]
         self.names_in_column = bool(self.config.get("names_in_column", True))
 
+        self.vacations = {}
+        raw_vac = self.config.get("vacations", {}) or {}
+        for name, periods in raw_vac.items():
+            parsed = []
+            for p in periods:
+                try:
+                    s = datetime.strptime(p[0], "%Y-%m-%d").date()
+                    e = datetime.strptime(p[1], "%Y-%m-%d").date()
+                    parsed.append((s, e))
+                except Exception:
+                    pass
+            self.vacations[name] = parsed
+
         ui_from_file = self.config.get("ui", {}) or {}
         self.ui = {**DEFAULT_UI, **ui_from_file}
         self.apply_fonts()
@@ -345,17 +393,15 @@ class MatrixShiftCalendar:
             [f"  • {t['name']}: {t['color']} — {len(t['members'])} чел."
              for t in self.teams]
         )
+        vac_info = f"Отпусков: {len(self.vacations)} чел." if self.vacations else "Отпусков нет"
         mode = "столбиком" if self.names_in_column else "в строку"
-        bw = self.ui.get("today_border_width", 3)
-        fs = "ДА" if self.ui.get("fullscreen_on_start", False) else "НЕТ"
 
         messagebox.showinfo(
             "НАСТРОЙКИ ОБНОВЛЕНЫ",
             f"Файл: {CONFIG_FILE}\n\n"
             f"Смен: {len(self.teams)}\n{teams_info}\n\n"
+            f"{vac_info}\n"
             f"Фамилии: {mode}\n"
-            f"Рамка сегодня: {bw} px\n"
-            f"Авто-полный экран: {fs}\n"
             f"Начало цикла: {self.start_date}\n"
             f"Длина смены: {self.shift_days} дн."
         )
@@ -443,6 +489,7 @@ class MatrixShiftCalendar:
         is_today = (cell_date == today) and not is_other_month
         bg = BG_CELL
         dim_factor = float(self.ui.get("other_month_dim", 0.55))
+        vac_color = self.ui.get("vacation_color", VACATION)
 
         cell_border = tk.Frame(self.grid_frame, bg=GREEN_DIM)
         cell_border.grid(row=row, column=col,
@@ -451,12 +498,9 @@ class MatrixShiftCalendar:
         cell = tk.Frame(cell_border, bg=bg)
         cell.pack(fill="both", expand=True)
 
-        # ★ Убран вертикальный внутренний отступ (pady=0)
         inner = tk.Frame(cell, bg=bg)
         inner.pack(fill="both", expand=True, padx=3, pady=0)
 
-        # === ВЕРХНЯЯ СТРОКА ===
-        # ★ Отступы обнулены полностью
         head = tk.Frame(inner, bg=bg)
         head.pack(fill="x", pady=0)
         head.grid_columnconfigure(0, weight=1)
@@ -492,21 +536,50 @@ class MatrixShiftCalendar:
             ).grid(row=0, column=2, sticky="e", padx=(0, 4))
 
         # === ФАМИЛИИ ===
-        # ★ pady=(0, 0) — фамилии прижаты к числу и к нижнему краю
         if team:
+            base_color = (dim_hex(team["color"], dim_factor)
+                          if is_other_month else team["color"])
+            vac_color_use = (dim_hex(vac_color, dim_factor)
+                             if is_other_month else vac_color)
+
             if self.names_in_column:
-                names_text = "\n".join(team["members"])
+                # Каждая фамилия — отдельный Label
+                for member in team["members"]:
+                    on_vac = self.is_on_vacation(member, cell_date)
+                    if on_vac:
+                        tk.Label(
+                            inner, text=member,
+                            font=self.FONT_NAME_STRIKE,   # ← зачёркнутый
+                            bg=bg, fg=vac_color_use,
+                            anchor="n"
+                        ).pack(anchor="n", fill="x")
+                    else:
+                        tk.Label(
+                            inner, text=member,
+                            font=self.FONT_NAME,
+                            bg=bg, fg=base_color,
+                            anchor="n"
+                        ).pack(anchor="n", fill="x")
             else:
+                # В строку — если хоть кто-то в отпуске, красим всю строку серым
+                any_vac = any(
+                    self.is_on_vacation(m, cell_date) for m in team["members"]
+                )
                 names_text = ", ".join(team["members"])
-
-            names_fg = (dim_hex(team["color"], dim_factor)
-                        if is_other_month else team["color"])
-
-            tk.Label(
-                inner, text=names_text, font=self.FONT_NAME,
-                bg=bg, fg=names_fg,
-                wraplength=250, justify="center", anchor="n"
-            ).pack(pady=0, anchor="n", fill="both", expand=True)
+                if any_vac:
+                    tk.Label(
+                        inner, text=names_text,
+                        font=self.FONT_NAME_STRIKE,
+                        bg=bg, fg=vac_color_use,
+                        wraplength=250, justify="center", anchor="n"
+                    ).pack(pady=0, anchor="n", fill="both", expand=True)
+                else:
+                    tk.Label(
+                        inner, text=names_text,
+                        font=self.FONT_NAME,
+                        bg=bg, fg=base_color,
+                        wraplength=250, justify="center", anchor="n"
+                    ).pack(pady=0, anchor="n", fill="both", expand=True)
 
         if is_today:
             self._draw_today_frame(cell, bw)
