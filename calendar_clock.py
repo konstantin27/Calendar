@@ -51,7 +51,7 @@ DEFAULT_CONFIG = {
         "window_height": 900,
         "min_width": 800,
         "min_height": 650,
-        "cell_min_height": 90,
+        "cell_min_height": 70,
         "font_day": 16,
         "font_holiday": 9,
         "font_names": 9,
@@ -220,17 +220,7 @@ class MatrixShiftCalendar:
         self.is_fullscreen = True
         self.root.attributes("-fullscreen", True)
         self.root.focus_set()
-        # ★ Перестроить после того, как окно реально развернулось
-        self.root.after(400, self._rebuild_calendar_safe)
-
-    def _rebuild_calendar_safe(self):
-        """Перестраивает календарь с гарантией, что размеры окна актуальны."""
-        try:
-            self.root.update_idletasks()
-            self.build_calendar()
-            self.root.update_idletasks()
-        except Exception:
-            pass
+        self.root.after(200, self.build_calendar)
 
     # ============ Клавиатура ============
     def key_prev_month(self, event=None):
@@ -249,15 +239,14 @@ class MatrixShiftCalendar:
         self.is_fullscreen = not self.is_fullscreen
         self.root.attributes("-fullscreen", self.is_fullscreen)
         self.root.focus_set()
-        # ★ Перестроить через 400 мс — окно успевает войти в новый режим
-        self.root.after(400, self._rebuild_calendar_safe)
+        self.root.after(200, self.build_calendar)
         return "break"
 
     def exit_fullscreen(self, event=None):
         if self.is_fullscreen:
             self.is_fullscreen = False
             self.root.attributes("-fullscreen", False)
-            self.root.after(400, self._rebuild_calendar_safe)
+            self.root.after(200, self.build_calendar)
         return "break"
 
     # ============ Настройки ============
@@ -306,14 +295,6 @@ class MatrixShiftCalendar:
         )
         try:
             self.FONT_NAME.configure(linespace=max(0, size - 2))
-        except Exception:
-            pass
-
-        self.FONT_NAME_STRIKE = tkfont.Font(
-            family="Consolas", size=size, weight="normal", overstrike=1
-        )
-        try:
-            self.FONT_NAME_STRIKE.configure(linespace=max(0, size - 2))
         except Exception:
             pass
 
@@ -398,7 +379,7 @@ class MatrixShiftCalendar:
             self.is_fullscreen = want_fs
             self.root.attributes("-fullscreen", want_fs)
 
-        self.root.after(200, self._rebuild_calendar_safe)
+        self.build_calendar()
         self.root.update_idletasks()
 
         teams_info = "\n".join(
@@ -547,7 +528,7 @@ class MatrixShiftCalendar:
                 bg=bg, fg=hol_fg, anchor="e"
             ).grid(row=0, column=2, sticky="e", padx=(0, 4))
 
-        # === ФАМИЛИИ ===
+        # === ФАМИЛИИ через ОДИН Text-виджет ===
         if team:
             base_color = (dim_hex(team["color"], dim_factor)
                           if is_other_month else team["color"])
@@ -555,44 +536,78 @@ class MatrixShiftCalendar:
                              if is_other_month else vac_color)
 
             if self.names_in_column:
-                for member in team["members"]:
-                    on_vac = self.is_on_vacation(member, cell_date)
-                    if on_vac:
-                        tk.Label(
-                            inner, text=member,
-                            font=self.FONT_NAME_STRIKE,
-                            bg=bg, fg=vac_color_use,
-                            anchor="n"
-                        ).pack(anchor="n", fill="x")
-                    else:
-                        tk.Label(
-                            inner, text=member,
-                            font=self.FONT_NAME,
-                            bg=bg, fg=base_color,
-                            anchor="n"
-                        ).pack(anchor="n", fill="x")
+                self._draw_names_text(inner, team["members"], cell_date,
+                                      bg, base_color, vac_color_use)
             else:
-                any_vac = any(
-                    self.is_on_vacation(m, cell_date) for m in team["members"]
-                )
-                names_text = ", ".join(team["members"])
-                if any_vac:
-                    tk.Label(
-                        inner, text=names_text,
-                        font=self.FONT_NAME_STRIKE,
-                        bg=bg, fg=vac_color_use,
-                        wraplength=250, justify="center", anchor="n"
-                    ).pack(pady=0, anchor="n", fill="both", expand=True)
-                else:
-                    tk.Label(
-                        inner, text=names_text,
-                        font=self.FONT_NAME,
-                        bg=bg, fg=base_color,
-                        wraplength=250, justify="center", anchor="n"
-                    ).pack(pady=0, anchor="n", fill="both", expand=True)
+                self._draw_names_inline(inner, team["members"], cell_date,
+                                        bg, base_color, vac_color_use)
 
         if is_today:
             self._draw_today_frame(cell, bw)
+
+    def _draw_names_text(self, parent, members, cell_date, bg,
+                         base_color, vac_color):
+        """Один Text-виджет: каждая фамилия на своей строке,
+        для отпускников — зачёркивание и серый цвет."""
+        txt = tk.Text(
+            parent,
+            height=len(members),
+            bg=bg, fg=base_color,
+            bd=0, highlightthickness=0,
+            font=self.FONT_NAME,
+            wrap="none",
+            cursor="arrow",
+            padx=0, pady=0,
+            takefocus=0,
+            spacing1=0, spacing2=0, spacing3=0,
+        )
+        txt.pack(fill="x", anchor="n")
+
+        txt.tag_configure("center", justify="center")
+        txt.tag_configure("vac", overstrike=1,
+                          foreground=vac_color)
+
+        for i, member in enumerate(members):
+            if i > 0:
+                txt.insert("end", "\n", "center")
+            if self.is_on_vacation(member, cell_date):
+                txt.insert("end", member, ("center", "vac"))
+            else:
+                txt.insert("end", member, "center")
+
+        txt.config(state="disabled")
+
+    def _draw_names_inline(self, parent, members, cell_date, bg,
+                           base_color, vac_color):
+        """Один Text-виджет: все фамилии через запятую,
+        отпускники зачёркнуты отдельно."""
+        txt = tk.Text(
+            parent,
+            height=2,
+            bg=bg, fg=base_color,
+            bd=0, highlightthickness=0,
+            font=self.FONT_NAME,
+            wrap="word",
+            cursor="arrow",
+            padx=0, pady=0,
+            takefocus=0,
+            spacing1=0, spacing2=0, spacing3=0,
+        )
+        txt.pack(fill="x", anchor="n")
+
+        txt.tag_configure("center", justify="center")
+        txt.tag_configure("vac", overstrike=1,
+                          foreground=vac_color)
+
+        for i, member in enumerate(members):
+            if i > 0:
+                txt.insert("end", ", ", "center")
+            if self.is_on_vacation(member, cell_date):
+                txt.insert("end", member, ("center", "vac"))
+            else:
+                txt.insert("end", member, "center")
+
+        txt.config(state="disabled")
 
     def _draw_today_frame(self, parent, bw):
         tk.Frame(parent, bg=RED, height=bw).place(x=0, y=0, relwidth=1)
