@@ -51,7 +51,7 @@ DEFAULT_CONFIG = {
         "window_height": 900,
         "min_width": 800,
         "min_height": 650,
-        "cell_min_height": 70,
+        "cell_min_height": 90,
         "font_day": 16,
         "font_holiday": 9,
         "font_names": 9,
@@ -131,17 +131,12 @@ class MatrixShiftCalendar:
         self.follow_today = True
         self.last_today = date.today()
 
-        # ★ Дебаунс для перестроения при изменении размера окна
-        self._resize_job = None
-
         self.root.bind("<Left>",     self.key_prev_month)
         self.root.bind("<Right>",    self.key_next_month)
         self.root.bind("<Return>",   self.key_today)
         self.root.bind("<KP_Enter>", self.key_today)
         self.root.bind("<F11>",      self.toggle_fullscreen)
         self.root.bind("<Escape>",   self.exit_fullscreen)
-        # ★ Реакция на изменение размера окна
-        self.root.bind("<Configure>", self._on_window_resize)
 
         self.root.focus_set()
 
@@ -219,33 +214,21 @@ class MatrixShiftCalendar:
         self.update_clock()
 
         if self.ui.get("fullscreen_on_start", False):
-            self.root.after(100, self._initial_fullscreen)
+            self.root.after(200, self._initial_fullscreen)
 
     def _initial_fullscreen(self):
         self.is_fullscreen = True
         self.root.attributes("-fullscreen", True)
         self.root.focus_set()
-        # Перестроить после смены размера
-        self.root.after(150, self.build_calendar)
+        # ★ Перестроить после того, как окно реально развернулось
+        self.root.after(400, self._rebuild_calendar_safe)
 
-    # ============ Реакция на изменение размера окна ============
-    def _on_window_resize(self, event=None):
-        """Вызывается при любом изменении размера окна (в т.ч. F11)."""
-        # Только когда меняется именно корневое окно
-        if event is not None and event.widget is not self.root:
-            return
-        # Дебаунс — перестроить один раз через 100 мс
-        if self._resize_job is not None:
-            try:
-                self.root.after_cancel(self._resize_job)
-            except Exception:
-                pass
-        self._resize_job = self.root.after(100, self._rebuild_after_resize)
-
-    def _rebuild_after_resize(self):
-        self._resize_job = None
+    def _rebuild_calendar_safe(self):
+        """Перестраивает календарь с гарантией, что размеры окна актуальны."""
         try:
+            self.root.update_idletasks()
             self.build_calendar()
+            self.root.update_idletasks()
         except Exception:
             pass
 
@@ -266,15 +249,15 @@ class MatrixShiftCalendar:
         self.is_fullscreen = not self.is_fullscreen
         self.root.attributes("-fullscreen", self.is_fullscreen)
         self.root.focus_set()
-        # ★ Перестроить календарь после смены режима
-        self.root.after(150, self.build_calendar)
+        # ★ Перестроить через 400 мс — окно успевает войти в новый режим
+        self.root.after(400, self._rebuild_calendar_safe)
         return "break"
 
     def exit_fullscreen(self, event=None):
         if self.is_fullscreen:
             self.is_fullscreen = False
             self.root.attributes("-fullscreen", False)
-            self.root.after(150, self.build_calendar)
+            self.root.after(400, self._rebuild_calendar_safe)
         return "break"
 
     # ============ Настройки ============
@@ -415,7 +398,7 @@ class MatrixShiftCalendar:
             self.is_fullscreen = want_fs
             self.root.attributes("-fullscreen", want_fs)
 
-        self.build_calendar()
+        self.root.after(200, self._rebuild_calendar_safe)
         self.root.update_idletasks()
 
         teams_info = "\n".join(
