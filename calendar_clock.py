@@ -28,7 +28,8 @@ DEFAULT_CONFIG = {
     "weekend_header_brightness": 100,
     "today_border_color": "#ff3333",
     "today_border_brightness": 100,
-    "holiday_gap": 12,
+    "holiday_gap": 6,
+    "holiday_max_chars": 12,
     "teams": [
         {"name": "Смена 1", "color": "#00ff41",
          "members": ["Иванов И.", "Петров П.", "Сидоров С.", "Морозов М."]},
@@ -40,7 +41,7 @@ DEFAULT_CONFIG = {
         "window_width": 1100, "window_height": 900,
         "min_width": 800, "min_height": 650,
         "cell_min_height": 70,
-        "font_day": 16, "font_holiday": 9, "font_names": 9,
+        "font_day": 16, "font_holiday": 8, "font_names": 9,
         "font_clock": 26, "font_date": 11, "font_title": 16, "font_head": 10,
         "today_border_width": 3,
         "other_month_dim": 0.55,
@@ -52,6 +53,7 @@ DEFAULT_CONFIG = {
 DEFAULT_UI = DEFAULT_CONFIG["ui"]
 DEFAULT_AUTO_RETURN = DEFAULT_CONFIG["auto_return_seconds"]
 DEFAULT_HOLIDAY_GAP = DEFAULT_CONFIG["holiday_gap"]
+DEFAULT_HOLIDAY_MAX = DEFAULT_CONFIG["holiday_max_chars"]
 
 
 def load_config():
@@ -72,6 +74,7 @@ def load_config():
             "today_border_color": "#ff3333",
             "today_border_brightness": 100,
             "holiday_gap": DEFAULT_HOLIDAY_GAP,
+            "holiday_max_chars": DEFAULT_HOLIDAY_MAX,
         }.items():
             if k not in cfg:
                 cfg[k] = v
@@ -583,16 +586,15 @@ class SettingsWindow(tk.Toplevel):
             e.insert(0, str(self.cfg.get("ui", {}).get(key, DEFAULT_UI.get(key, ""))))
             self.ui_entries[key] = e
 
-        # ★ ОТСТУП МЕЖДУ ЧИСЛОМ И ПРАЗДНИКОМ
-        tk.Label(inner, text="Отступ между числом и названием праздника:",
+        # ★ НАСТРОЙКИ ПРАЗДНИКА
+        tk.Label(inner, text="Название праздника в ячейке:",
                  font=("Consolas", 11, "bold"), bg=BG, fg=GREEN
                  ).pack(anchor="w", padx=20, pady=(20, 5))
 
         gap_row = tk.Frame(inner, bg=BG)
         gap_row.pack(fill="x", padx=20, pady=3)
-        tk.Label(gap_row, text="Пикселей:", font=("Consolas", 10),
-                 bg=BG, fg=GREEN_BRT).pack(side="left")
-
+        tk.Label(gap_row, text="Отступ от числа (px):", font=("Consolas", 10),
+                 bg=BG, fg=GREEN_BRT, width=22, anchor="w").pack(side="left")
         self.e_holiday_gap = tk.Entry(gap_row, font=("Consolas", 10),
                                        bg=BG_PANEL, fg=GREEN_BRT,
                                        insertbackground=GREEN, width=8)
@@ -600,9 +602,22 @@ class SettingsWindow(tk.Toplevel):
         self.e_holiday_gap.insert(
             0, str(self.cfg.get("holiday_gap", DEFAULT_HOLIDAY_GAP)))
 
-        tk.Label(gap_row, text="(по умолчанию 12 — если буквы сливаются, увеличь до 16-20)",
-                 font=("Consolas", 9), bg=BG, fg=GREEN_DIM
-                 ).pack(side="left", padx=5)
+        max_row = tk.Frame(inner, bg=BG)
+        max_row.pack(fill="x", padx=20, pady=3)
+        tk.Label(max_row, text="Макс. символов (обрезать):", font=("Consolas", 10),
+                 bg=BG, fg=GREEN_BRT, width=22, anchor="w").pack(side="left")
+        self.e_holiday_max = tk.Entry(max_row, font=("Consolas", 10),
+                                       bg=BG_PANEL, fg=GREEN_BRT,
+                                       insertbackground=GREEN, width=8)
+        self.e_holiday_max.pack(side="left", padx=5)
+        self.e_holiday_max.insert(
+            0, str(self.cfg.get("holiday_max_chars", DEFAULT_HOLIDAY_MAX)))
+
+        tk.Label(inner,
+                 text="Если название обрезается — уменьши «Макс. символов» до 10-12,\n"
+                      "или уменьши «Размер праздника» ниже.",
+                 font=("Consolas", 9), bg=BG, fg=GREEN_DIM, justify="left"
+                 ).pack(anchor="w", padx=20, pady=(2, 15))
 
         # Рамка текущего дня
         tk.Label(inner, text="Рамка текущего дня (сегодня):",
@@ -836,16 +851,23 @@ class SettingsWindow(tk.Toplevel):
                                  parent=self)
             return
 
-        # ★ Отступ праздника
         try:
             gap = int(self.e_holiday_gap.get().strip())
-            if gap < 0:
-                gap = 0
+            if gap < 0: gap = 0
             self.cfg["holiday_gap"] = gap
         except Exception:
             messagebox.showerror("ОШИБКА",
-                                 "«Отступ праздника» должен быть числом",
-                                 parent=self)
+                                 "«Отступ от числа» должен быть числом", parent=self)
+            return
+
+        try:
+            mx = int(self.e_holiday_max.get().strip())
+            if mx < 3: mx = 3
+            if mx > 40: mx = 40
+            self.cfg["holiday_max_chars"] = mx
+        except Exception:
+            messagebox.showerror("ОШИБКА",
+                                 "«Макс. символов» должен быть числом", parent=self)
             return
 
         self.cfg["names_in_column"] = bool(self.v_col.get())
@@ -924,7 +946,7 @@ class SettingsWindow(tk.Toplevel):
                 f"Файл: {CONFIG_FILE}\n\n"
                 f"Смен: {len(self.cfg['teams'])} — {teams_info}\n"
                 f"Периодов отпусков: {vac_count}\n"
-                f"Отступ праздника: {gap} px\n"
+                f"Отступ праздника: {gap} px, макс. {mx} символов\n"
                 f"Приглушение соседних месяцев: {dim_percent}%\n"
                 f"Автовозврат: {auto_txt}\n"
                 f"Фон СБ/ВС: {wk_color} @ {self.cfg['weekend_header_brightness']}%\n"
@@ -1119,16 +1141,17 @@ class MatrixShiftCalendar:
                 inner = tk.Frame(cell, bg=BG_CELL)
                 inner.pack(fill="both", expand=True, padx=4, pady=4)
 
+                # ★ head — на всю ширину inner, выравнивание по левому краю
                 head = tk.Frame(inner, bg=BG_CELL)
-                head.pack(anchor="center")
+                head.pack(fill="x", anchor="w")
 
                 day_label = tk.Label(head, text="", font=self.FONT_DAY,
-                                     bg=BG_CELL, fg=GREEN)
+                                     bg=BG_CELL, fg=GREEN, anchor="w")
                 day_label.pack(side="left")
 
-                # ★ Праздник — с настраиваемым отступом
+                # ★ Праздник — сразу после числа, обрезка справа
                 hol_label = tk.Label(head, text="", font=self.FONT_HOL,
-                                     bg=BG_CELL, fg=RED)
+                                     bg=BG_CELL, fg=RED, anchor="w")
 
                 names_text = tk.Text(inner, height=max_members,
                                      bg=BG_CELL, fg=GREEN,
@@ -1203,6 +1226,7 @@ class MatrixShiftCalendar:
         vac_color = self.ui.get("vacation_color", VACATION)
         bw = int(self.ui.get("today_border_width", 3))
         gap = int(self.config.get("holiday_gap", DEFAULT_HOLIDAY_GAP))
+        max_chars = int(self.config.get("holiday_max_chars", DEFAULT_HOLIDAY_MAX))
 
         today_color = self._get_today_color()
 
@@ -1222,12 +1246,15 @@ class MatrixShiftCalendar:
 
         c["day_label"].configure(text=str(cell_date.day), fg=day_fg, bg=bg)
 
-        # ★ Праздник — с отступом gap
+        # ★ Праздник — обрезка по max_chars, отступ gap
         if hol_name:
-            short = hol_name if len(hol_name) <= 20 else hol_name[:18] + "…"
+            if len(hol_name) > max_chars:
+                short = hol_name[:max_chars - 1] + "…"
+            else:
+                short = hol_name
             hol_fg = dim_hex(RED, dim_factor) if is_other_month else RED
             c["hol_label"].configure(text=short, fg=hol_fg, bg=bg)
-            c["hol_label"].pack(side="left", padx=(gap, 0))   # ← отступ
+            c["hol_label"].pack(side="left", padx=(gap, 0))
         else:
             c["hol_label"].pack_forget()
 
