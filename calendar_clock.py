@@ -1031,12 +1031,17 @@ class MatrixShiftCalendar:
         self.title_label = tk.Label(top, font=self.FONT_TITLE, bg=BG, fg=GREEN)
         self.title_label.pack(side="left", expand=True)
 
+        # ★ ЧАСЫ И ДАТА НА ОДНОЙ СТРОКЕ
         clock_frame = tk.Frame(root, bg=BG)
-        clock_frame.pack(side="bottom", fill="x", pady=(4, 8))
-        self.time_label = tk.Label(clock_frame, font=self.FONT_CLOCK, bg=BG, fg=GREEN)
-        self.time_label.pack()
+        clock_frame.pack(side="bottom", fill="x", padx=20, pady=(4, 8))
+
+        # Дата слева
         self.date_label = tk.Label(clock_frame, font=self.FONT_DATE, bg=BG, fg=GREEN_DIM)
-        self.date_label.pack()
+        self.date_label.pack(side="left", anchor="s", pady=(0, 4))
+
+        # Часы справа
+        self.time_label = tk.Label(clock_frame, font=self.FONT_CLOCK, bg=BG, fg=GREEN)
+        self.time_label.pack(side="right", anchor="s")
 
         self.head_frame = tk.Frame(root, bg=GREEN_DRK)
         self.head_frame.pack(side="top", fill="x", padx=8, pady=(3, 0))
@@ -1141,7 +1146,6 @@ class MatrixShiftCalendar:
                 inner = tk.Frame(cell, bg=BG_CELL)
                 inner.pack(fill="both", expand=True, padx=4, pady=4)
 
-                # ★ head — на всю ширину inner, выравнивание по левому краю
                 head = tk.Frame(inner, bg=BG_CELL)
                 head.pack(fill="x", anchor="w")
 
@@ -1149,7 +1153,6 @@ class MatrixShiftCalendar:
                                      bg=BG_CELL, fg=GREEN, anchor="w")
                 day_label.pack(side="left")
 
-                # ★ Праздник — сразу после числа, обрезка справа
                 hol_label = tk.Label(head, text="", font=self.FONT_HOL,
                                      bg=BG_CELL, fg=RED, anchor="w")
 
@@ -1246,7 +1249,6 @@ class MatrixShiftCalendar:
 
         c["day_label"].configure(text=str(cell_date.day), fg=day_fg, bg=bg)
 
-        # ★ Праздник — обрезка по max_chars, отступ gap
         if hol_name:
             if len(hol_name) > max_chars:
                 short = hol_name[:max_chars - 1] + "…"
